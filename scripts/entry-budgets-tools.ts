@@ -51,7 +51,7 @@ export const TOOL_ENTRY_BUDGETS: Readonly<Record<string, BundleBudget>> = {
   // 2026-09-16 (2.0.1: --param, the byte-for-byte query splice, the duplicate-header refusal): raw 17 701 → 18 619 (+918 B, measured 17 684 → 18 602); gzip 7 023 → 7 378 (+355 B, measured 7 012 → 7 367); brotli 6 143 → 6 513 (measured 6 393, ~120 B as the other brotli rows).
   // 2026-09-17 (2.0.2: the shared sanitizer document, annotate's loop-item refusal, the doctor's token rule and help texts): raw 18 619 → 19 210 (+591 B, measured 18 602 → 19 193); gzip 7 378 → 7 600 (+222 B, measured 7 367 → 7 589); brotli 6 513 → 6 711 (measured 6 591; ~120 B).
   // 2026-09-17 (2.0.3: the Trusted Types policy on the realm, islands hearing every change, the owed route refresh, the doctor's --token-param): raw 19 210 → 19 261 (+51 B, measured 19 193 → 19 244); gzip 7 600 → 7 624 (+24 B, measured 7 589 → 7 613).
-  'doctor.js': { raw: 19_314, gzip: 7_643, brotli: 6_734 },
+  'doctor.js': { raw: 19_337, gzip: 7_643, brotli: 6_734 },
   //
   // 2026-09-12 (pll migrate reports a read key 2.0 has no home for): the
   // codemod carries the option lists of `ReadDocumentOptions`/`ReadGlobalOptions`

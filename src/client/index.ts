@@ -106,6 +106,9 @@ export class LivePreviewClient {
                 fetchFn: config.mergeFetch,
               }),
         debounceMs: config.debounceMs,
+        ...(config.bindingDebounceMs !== undefined
+          ? { bindingDebounceMs: config.bindingDebounceMs }
+          : {}),
         heartbeatMs: config.heartbeatMs,
         intersectionRootMargin: config.intersectionRootMargin,
         scopeBindingsByOwner: config.scopeBindingsByOwner,

@@ -40,7 +40,9 @@ describe('generateInlineScript', () => {
 
   it('emits a self-contained string without redundant build metadata', () => {
     const script = generateInlineScript();
-    expect(script.startsWith(`var __LIVE_PREVIEW_CONFIG__=[${','.repeat(24)}"v2"];\n`)).toBe(true);
+    expect(script.startsWith(`var __LIVE_PREVIEW_CONFIG__=[${','.repeat(24)}"v2",,];\n`)).toBe(
+      true,
+    );
     expect(script).not.toContain(runtimeBuildInfo().generatedAt);
   });
 
@@ -62,8 +64,12 @@ describe('generateInlineScript', () => {
 
   it('does not duplicate runtime defaults in the generated config', () => {
     const script = generateInlineScript();
-    // Every slot empty but the last, which names the defaults they resolve to.
-    expect(generatedConfig(script)).toEqual([...Array<undefined>(24).fill(undefined), 'v2']);
+    // Existing defaults slot stays fixed; appended options remain omitted.
+    expect(generatedConfig(script)).toEqual([
+      ...Array<undefined>(24).fill(undefined),
+      'v2',
+      undefined,
+    ]);
   });
 
   it('carries owner scoping in its own trailing wire slot', () => {
@@ -185,7 +191,7 @@ describe('generateInlineScript', () => {
     // `'v1'` page ran the 2.0 rows. The omitted depth still falls to the runtime's 1.
     expect(v1[1]).toBe('https://cms.example.com');
     expect(v1[3]).toBeUndefined();
-    expect(v1.at(-1)).toBe('v1');
+    expect(v1[INLINE_CONFIG_KEYS.indexOf('defaults')]).toBe('v1');
   });
 
   it('treats null like an omitted option', () => {
@@ -208,7 +214,7 @@ describe('generateInlineScript', () => {
   });
 
   it('writes the slots in INLINE_CONFIG_KEYS order, the one table the runtime destructures', () => {
-    expect(INLINE_CONFIG_KEYS).toHaveLength(25);
+    expect(INLINE_CONFIG_KEYS).toHaveLength(26);
     expect(INLINE_CONFIG_KEYS.indexOf('fragmentEndpoint')).toBe(17);
     expect(INLINE_CONFIG_KEYS.indexOf('revealEditedField')).toBe(18);
     expect(INLINE_CONFIG_KEYS.indexOf('routeStrategy')).toBe(19);
@@ -225,9 +231,11 @@ describe('generateInlineScript', () => {
     );
   });
 
-  it('names the defaults it resolved against in the last slot, always', () => {
+  it('names the defaults in their stable slot before appended binding scheduling', () => {
     const slot = INLINE_CONFIG_KEYS.indexOf('defaults');
-    expect(slot).toBe(INLINE_CONFIG_KEYS.length - 1);
+    expect(slot).toBe(24);
+    expect(INLINE_CONFIG_KEYS.indexOf('bindingDebounceMs')).toBe(25);
+    expect(generatedConfig(generateInlineScript({ bindingDebounceMs: 0 }))[25]).toBe(0);
     expect(generatedConfig(generateInlineScript())[slot]).toBe('v2');
     expect(generatedConfig(generateInlineScript({ defaults: 'v2' }))[slot]).toBe('v2');
     expect(generatedConfig(generateInlineScript({ defaults: 'v1' }))[slot]).toBe('v1');
@@ -258,7 +266,7 @@ describe('generateInlineScript', () => {
     // The 2.0 rows stay off the wire: the runtime already defaults to them.
     expect(
       generatedConfig(generateInlineScript())
-        .slice(0, -1)
+        .slice(0, 24)
         .every((v) => v === undefined),
     ).toBe(true);
   });
@@ -280,7 +288,9 @@ describe('generateInlineScript', () => {
       ),
     };
     for (const [path, script] of Object.entries(paths)) {
-      expect(generatedConfig(script).at(-1), path).toBe(path.includes("'v1'") ? 'v1' : 'v2');
+      expect(generatedConfig(script)[INLINE_CONFIG_KEYS.indexOf('defaults')], path).toBe(
+        path.includes("'v1'") ? 'v1' : 'v2',
+      );
     }
   });
 

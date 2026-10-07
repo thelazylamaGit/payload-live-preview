@@ -526,6 +526,23 @@ complete `style` attribute writes are not enabled. Raw attributes are
 `data-payload-type="hexColor"`, `data-payload-css-property="background-color"` and
 optional `data-payload-css-default="#0008"`.
 
+For responsive colour dragging, configure the existing Astro integration:
+
+```ts
+livePreview({
+  // Keep your existing origins and fragment endpoint configuration.
+  debounceMs: 200,
+  bindingDebounceMs: 0,
+});
+```
+
+`bindingDebounceMs` controls only direct DOM writes. Omitted, it falls back to
+`debounceMs`. Zero batches the latest values on the next animation frame; a
+nonzero value uses the existing leading frame and four-window maximum wait.
+Population keeps the `debounceMs` window, and fragment request planning and
+supersession remain unchanged. Server-dependent edits and initial synchronization
+may still wait for server results; visibility gating still applies.
+
 Scheduling retains its defaults: the leading frame, 50 ms debounce and maximum
 wait of four debounce windows. On pages opting into `patchFields`, pending frames and maximum-wait deadlines survive
 new revisions, so sustained dragging continues to display the latest values.

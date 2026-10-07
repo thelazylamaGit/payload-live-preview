@@ -305,6 +305,7 @@ export interface LivePreviewClientConfig {
     readonly apiRoute?: string;
     readonly autoBind?: 'off' | 'unique';
     readonly autoStart?: boolean;
+    readonly bindingDebounceMs?: number;
     readonly debounceMs?: number;
     readonly debug?: boolean;
     readonly defaults?: DefaultsProfile;

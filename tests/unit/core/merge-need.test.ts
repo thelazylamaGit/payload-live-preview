@@ -61,6 +61,41 @@ async function keystrokes(field: (index: number) => Record<string, unknown>): Pr
 }
 
 describe('what a keystroke costs (LP-3, LP-4)', () => {
+  it.each([undefined, 0, 25])(
+    'keeps population on the request window with bindingDebounceMs=%s',
+    async (bindingDebounceMs) => {
+      document.body.innerHTML =
+        '<a data-payload-field="venue" data-payload-type="relationship">old venue</a>';
+      const fetchFn = mergingFetch();
+      const runtime = makeRuntime({
+        debounceMs: 200,
+        ...(bindingDebounceMs === undefined ? {} : { bindingDebounceMs }),
+        renderers: { relationship: relationshipRenderer() },
+        dataMerge: { serverURL: 'https://cms.example.com', fetchFn: fetchFn as typeof fetch },
+      });
+      runtime.start();
+      try {
+        for (let index = 0; index < 6; index += 1) {
+          fireMessage({
+            type: 'payload-live-preview',
+            collectionSlug: 'events',
+            data: { id: 'event-1', venue: index % 2 === 0 ? 'venue-1' : 'venue-2' },
+          });
+          await vi.advanceTimersByTimeAsync(20);
+          expect(fetchFn).toHaveBeenCalledTimes(1);
+        }
+        await vi.advanceTimersByTimeAsync(179);
+        expect(fetchFn).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(250);
+        expect(document.querySelector('a')?.textContent).toBe('Halle Acht');
+      } finally {
+        runtime.destroy();
+      }
+    },
+  );
+
   it('a plain text field costs no request at all', async () => {
     document.body.innerHTML = '<h1 data-payload-field="title">old</h1>';
     const fetchFn = mergingFetch();

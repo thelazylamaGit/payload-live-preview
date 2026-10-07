@@ -66,7 +66,7 @@ export function inlineScriptConfig(
   assertMergeDepthExplicit(options);
   const resolved = resolvePolicyOptions(options);
   return {
-    // The generator names it in the last slot and, under `'v1'`, reads an
+    // The generator names it in its stable slot and, under `'v1'`, reads an
     // omitted `mergeDepth` as deliberate.
     ...(options.defaults !== undefined ? { defaults: options.defaults } : {}),
     ...(options.allowedOrigins !== undefined ? { allowedOrigins: options.allowedOrigins } : {}),
@@ -78,6 +78,9 @@ export function inlineScriptConfig(
       : {}),
     ...(options.debug !== undefined ? { debug: options.debug } : {}),
     ...(options.debounceMs !== undefined ? { debounceMs: options.debounceMs } : {}),
+    ...(options.bindingDebounceMs !== undefined
+      ? { bindingDebounceMs: options.bindingDebounceMs }
+      : {}),
     ...(options.heartbeatMs !== undefined ? { heartbeatMs: options.heartbeatMs } : {}),
     ...(resolved.skipUnchanged !== undefined ? { skipUnchanged: resolved.skipUnchanged } : {}),
     ...(options.scopeBindingsByOwner !== undefined

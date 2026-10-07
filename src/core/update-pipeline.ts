@@ -116,7 +116,8 @@ export class UpdatePipeline {
     state.activeUpdate = transaction;
     deps.scheduler.acceptRevision(
       revision,
-      deps.root.querySelector('[data-payload-patch-fields]') !== null,
+      deps.bindingDebounceMs !== undefined ||
+        deps.root.querySelector('[data-payload-patch-fields]') !== null,
     );
     state.updateCount += 1;
     if (message.protocolVersion !== undefined) {

@@ -27,6 +27,7 @@ always wins. The ledger of what changed is
 | `onDiagnostic`             | —      | —             | —                                                        | yes                      | —                                                   | same                                 |
 | `debug`                    | yes    | yes           | yes                                                      | —                        | client: dev detection; inline and adapters: `false` | same                                 |
 | `debounceMs`               | yes    | yes           | yes                                                      | —                        | `50`                                                | same                                 |
+| `bindingDebounceMs`        | yes    | yes           | yes                                                      | ?                        | `debounceMs`                                        | same                                 |
 | `heartbeatMs`              | yes    | yes           | yes                                                      | —                        | `0` (off; the admin sends no keepalive)             | same                                 |
 | `enableA11y`               | yes    | yes           | —                                                        | —                        | `true`                                              | same                                 |
 | `a11yLocale`               | yes    | —             | —                                                        | —                        | detected locale                                     | same                                 |
@@ -227,6 +228,14 @@ Notes on the rows that need one:
   one flush when it closes. Typing therefore costs one frame at the start of a
   phrase and one at the end of it, not 50 ms per keystroke. `debounceMs: 0`
   removes the window entirely — and with it the merge coalescing that shares it.
+- `bindingDebounceMs` overrides only DOM-write scheduling. Omit it to retain
+  the existing `debounceMs` behavior. Set `debounceMs: 200, bindingDebounceMs: 0`
+  for frame-batched bindings while population keeps its 200 ms coalescing window.
+  Zero writes on the next animation frame; revisions replace queued values
+  without postponing the frame. Nonzero values retain the leading frame and
+  maximum wait of four binding debounce windows. Visibility gating still applies.
+  Fragment planning, request supersession and population scheduling are unchanged;
+  this option does not add a fragment-request debounce.
 - `intersectionRootMargin` cannot pull a write in ahead of the fold inside a
   preview iframe. With an implicit root the browser measures the intersection
   against the top-level viewport and clips it to the frame's own box, and a

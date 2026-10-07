@@ -4,14 +4,14 @@
 
 ```ts
 
-import { a } from '../../fragment-endpoint-yIQFf015.js';
-import { b } from '../../fragment-endpoint-yIQFf015.js';
-import { b as b_2 } from '../../locals-CNUGYbA_.js';
-import { c } from '../../fragment-endpoint-yIQFf015.js';
-import { F } from '../../fragment-endpoint-yIQFf015.js';
-import { d as FragmentRenderInput } from '../../fragment-endpoint-yIQFf015.js';
-import { L as LivePreviewLocals } from '../../locals-CNUGYbA_.js';
-import { P as PreviewAdapterOptions } from '../../options-uHKrDM2U.js';
+import { a } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { b } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { b as b_2 } from '../../locals-UoaZ9KIu.js';
+import { c } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { F } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { d as FragmentRenderInput } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { L as LivePreviewLocals } from '../../locals-UoaZ9KIu.js';
+import { P as PreviewAdapterOptions } from '../../options-BciKoFeg.js';
 
 // @public
 export function createFragmentEndpoint(options: FragmentEndpointOptions): (event: {

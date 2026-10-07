@@ -106,6 +106,8 @@ export interface RuntimeOptions {
   readonly emitter: EventEmitter;
   /** Debounce window in ms. */
   readonly debounceMs?: number;
+  /** DOM-write debounce in ms. Defaults to `debounceMs`; `0` batches on animation frames. */
+  readonly bindingDebounceMs?: number;
   /** Heartbeat timeout in ms; `0` disables it. */
   readonly heartbeatMs?: number;
   /** `rootMargin` for the IntersectionObserver. */

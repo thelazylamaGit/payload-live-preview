@@ -26,6 +26,8 @@ export interface LivePreviewClientConfig {
   readonly debug?: boolean;
   /** Debounce window for incoming updates. Default 50 ms. */
   readonly debounceMs?: number;
+  /** DOM-write debounce in ms. Defaults to `debounceMs`; `0` batches on animation frames. */
+  readonly bindingDebounceMs?: number;
   /** Heartbeat timeout in ms; `0` disables it (default), because the admin posts only on edits. */
   readonly heartbeatMs?: number;
   /** IntersectionObserver `rootMargin`. Default `200px`. */
