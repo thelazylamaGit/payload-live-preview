@@ -17,6 +17,8 @@ import type { DataMerger, MergeRequest, MergeResult } from './data-merger';
 import type { DependencyMap } from './dependencies';
 import { FieldChangeTracker } from './field-changes';
 import type { RuntimeDeps, UpdateTransaction } from './runtime-state';
+import { canPatchFragment } from './fragment-patches';
+import { resolveFieldValue } from './field-value';
 import { FRAGMENT_ATTRIBUTE } from './strategies';
 import { hasBindingBelow, SYSTEM_FIELD_NAMES } from './unbound-fields';
 
@@ -28,6 +30,7 @@ import { hasBindingBelow, SYSTEM_FIELD_NAMES } from './unbound-fields';
  * question about a binding and about a value.
  */
 const SELF_SUFFICIENT_TYPES: ReadonlySet<string> = new Set([
+  'hexColor',
   'text',
   'textarea',
   'email',
@@ -92,7 +95,34 @@ export class MergeNeed {
     const raw = transaction.message.data ?? {};
     // Advanced for every message, including the ones that return here: the next
     // diff has to be against what the panel last posted either way.
-    const { changed } = this.rawChanges.diff(raw, NO_DEPENDENCIES);
+    const optIn =
+      !(typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__) &&
+      deps.root.querySelector('[data-payload-patch-fields]') !== null;
+    const { changed, paths, baseline, structuralPaths } = this.rawChanges.diff(
+      raw,
+      NO_DEPENDENCIES,
+      optIn,
+    );
+    if (
+      optIn &&
+      !baseline &&
+      !transaction.forceRender &&
+      paths.size > 0 &&
+      structuralPaths.size === 0 &&
+      [...paths].every(
+        (path) =>
+          isScalar(resolveFieldValue(raw, path, undefined)) &&
+          deps.cache.get(path)?.some((target) => SELF_SUFFICIENT_TYPES.has(target.fieldType)) ===
+            true,
+      ) &&
+      deps.strategies.fragment
+        ?.plan(deps.root, changed)
+        .every((boundary) => canPatchFragment(deps, boundary, paths, structuralPaths)) === true
+    ) {
+      const fields = overlayPaths(this.resolved ?? raw, raw, paths);
+      this.resolved = fields;
+      return { merge: false, fields };
+    }
     if (!readsPopulatedValues(deps)) return { merge: false, fields: raw };
     const base = this.resolved;
     // The first message has nothing to carry over, so it buys the document once.
@@ -274,4 +304,35 @@ function createPending(): PendingMerge {
     settle = resolve;
   });
   return { promise, settle };
+}
+
+/** Preserve existing populated siblings while applying only the changed scalar paths. */
+function overlayPaths(
+  base: Record<string, unknown>,
+  raw: Record<string, unknown>,
+  paths: ReadonlySet<string>,
+): Record<string, unknown> {
+  const fields = { ...base };
+  for (const path of paths) {
+    if (Object.hasOwn(raw, path)) {
+      fields[path] = raw[path];
+      continue;
+    }
+    const segments = path.split('.');
+    if (segments.some((segment) => ['__proto__', 'constructor', 'prototype'].includes(segment))) {
+      continue;
+    }
+    let target = fields;
+    for (const segment of segments.slice(0, -1)) {
+      const value = target[segment];
+      const clone = Array.isArray(value)
+        ? [...(value as unknown[])]
+        : { ...(value as Record<string, unknown>) };
+      target[segment] = clone;
+      target = clone as Record<string, unknown>;
+    }
+    const key = segments.at(-1);
+    if (key !== undefined) target[key] = resolveFieldValue(raw, path, undefined);
+  }
+  return fields;
 }

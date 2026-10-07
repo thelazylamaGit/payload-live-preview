@@ -20,6 +20,7 @@ export interface FragmentBoundaryAttributes {
   readonly 'data-payload-fragment': string;
   readonly 'data-payload-fragment-key'?: string;
   readonly 'data-payload-depends'?: string;
+  readonly 'data-payload-patch-fields'?: string;
 }
 
 export interface FragmentBoundaryOptions {
@@ -27,6 +28,8 @@ export interface FragmentBoundaryOptions {
   readonly key?: string;
   /** The fields that re-render the boundary. Without it, every update does. */
   readonly dependsOn?: readonly string[];
+  /** Exact bound paths safe to patch without a server render; no wildcards. */
+  readonly patchFields?: readonly string[];
 }
 
 /**
@@ -98,6 +101,9 @@ function boundaryAttributes(
   const dependsOn = options.dependsOn ?? [];
   return {
     'data-payload-fragment': id,
+    ...(options.patchFields?.length
+      ? { 'data-payload-patch-fields': options.patchFields.join(',') }
+      : {}),
     ...(key !== undefined ? { 'data-payload-fragment-key': key } : {}),
     ...(dependsOn.length > 0 ? { 'data-payload-depends': dependsOn.join(',') } : {}),
   };

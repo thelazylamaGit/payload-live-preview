@@ -9,6 +9,8 @@ import type { FieldName } from './paths';
 export interface FieldBindingAttributes {
   readonly 'data-payload-field': string;
   readonly 'data-payload-attribute'?: string;
+  readonly 'data-payload-css-property'?: 'background-color';
+  readonly 'data-payload-css-default'?: string;
   readonly 'data-payload-type'?: string;
   readonly 'data-payload-richtext'?: string;
   readonly 'data-payload-html'?: string;
@@ -21,6 +23,10 @@ export interface FieldBindingAttributes {
 export interface BindOptions {
   /** Attribute to write instead of the text content, e.g. `'src'` for `<img>`. */
   readonly attribute?: string;
+  /** Bind a hex colour to this property, using the hexColor renderer. */
+  readonly cssProperty?: 'background-color';
+  /** Hex colour used for null/empty values; omitted means remove the inline property. */
+  readonly cssDefault?: string;
   /** Explicit field type, bypassing schema detection. */
   readonly type?: string;
   /** Mark the binding as Lexical rich text; needed only when the initial render is empty. */
@@ -69,6 +75,8 @@ function buildAttributes(field: string, options: BindOptions | undefined): Field
   const attrs: {
     'data-payload-field': string;
     'data-payload-attribute'?: string;
+    'data-payload-css-property'?: 'background-color';
+    'data-payload-css-default'?: string;
     'data-payload-type'?: string;
     'data-payload-richtext'?: string;
     'data-payload-html'?: string;
@@ -77,6 +85,19 @@ function buildAttributes(field: string, options: BindOptions | undefined): Field
     'data-payload-href'?: string;
     'data-payload-array-template'?: string;
   } = { 'data-payload-field': field };
+  if (options?.cssProperty !== undefined) {
+    if (
+      options.attribute !== undefined ||
+      (options.type !== undefined && options.type !== 'hexColor')
+    ) {
+      throw new Error(
+        'bind: cssProperty requires the hexColor renderer and cannot target an attribute',
+      );
+    }
+    attrs['data-payload-css-property'] = options.cssProperty;
+    attrs['data-payload-type'] = 'hexColor';
+  }
+  if (options?.cssDefault !== undefined) attrs['data-payload-css-default'] = options.cssDefault;
   if (options?.attribute !== undefined) attrs['data-payload-attribute'] = options.attribute;
   if (options?.type !== undefined) attrs['data-payload-type'] = options.type;
   // Presence attributes: the runtime tests for the attribute, not its value.

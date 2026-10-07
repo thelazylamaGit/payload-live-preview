@@ -7,6 +7,7 @@ import type { PayloadLivePreviewData } from '@/types/payload-protocol';
 import { trustedHtml } from '@security/trusted-types';
 import { reportUnboundChange } from './fidelity';
 import { bindingValue } from './field-value';
+import { canPatchFragment } from './fragment-patches';
 import { morphElement } from './morph';
 import type { RuntimeDeps, RuntimeState, UpdateTransaction } from './runtime-state';
 import type { FragmentContext, FragmentStrategy, RouteOutcome, RouteStrategy } from './strategies';
@@ -45,10 +46,36 @@ export class StrategyRunner {
     private readonly host: StrategyHost,
   ) {}
 
-  planFragments(touched: ReadonlySet<string>): FragmentPlan | null {
+  planFragments(
+    touched: ReadonlySet<string>,
+    transaction?: UpdateTransaction,
+  ): FragmentPlan | null {
     const strategy = this.deps.strategies.fragment;
     if (strategy === undefined) return null;
-    return planBoundaries(strategy, strategy.plan(this.deps.root, touched));
+    const planned = strategy
+      .plan(this.deps.root, touched)
+      .filter(
+        (boundary) =>
+          transaction === undefined ||
+          transaction.baseline ||
+          transaction.forceRender ||
+          !canPatchFragment(
+            this.deps,
+            boundary,
+            new Set([...(transaction.changedPaths ?? []), ...transaction.invalidated]),
+            transaction.structuralPaths,
+          ),
+      );
+    for (const boundary of this.state.fragmentRenderOwed) {
+      if (!this.deps.root.contains(boundary)) this.state.fragmentRenderOwed.delete(boundary);
+      if (this.deps.root.contains(boundary) && !planned.includes(boundary)) planned.push(boundary);
+    }
+    for (const boundary of planned) {
+      if (boundary.hasAttribute('data-payload-patch-fields')) {
+        this.state.fragmentRenderOwed.add(boundary);
+      }
+    }
+    return planBoundaries(strategy, planned);
   }
 
   /**
@@ -156,6 +183,12 @@ export class StrategyRunner {
     const { deps, state } = this;
     const controller = new AbortController();
     state.fragmentController = controller;
+    // Escalated renders also survive a later direct edit.
+    for (const boundary of plan.boundaries) {
+      if (boundary.hasAttribute('data-payload-patch-fields')) {
+        state.fragmentRenderOwed.add(boundary);
+      }
+    }
     const isCurrent = (): boolean => state.isCurrent(transaction) && !controller.signal.aborted;
     const { emitter } = deps;
     const { message } = transaction;
@@ -177,11 +210,14 @@ export class StrategyRunner {
       },
       morph: (boundary, html) => {
         morphFragment(boundary, html);
+        // Indexed patch bindings must follow the server's new order immediately.
+        if (boundary.hasAttribute('data-payload-patch-fields')) this.host.rebuildCache();
       },
       patch: (boundary) => {
         this.patchFallback(transaction, data, boundary);
       },
       rendered: (element, id, key) => {
+        if (isCurrent()) this.state.fragmentRenderOwed.delete(element);
         transaction.pendingFragments -= 1;
         void emitter.emitWhile(
           'fragmentRender',
@@ -190,6 +226,7 @@ export class StrategyRunner {
         );
       },
       failed: (element, id, key, code, reason) => {
+        if (isCurrent()) this.state.fragmentRenderOwed.delete(element);
         transaction.pendingFragments -= 1;
         const detail = `fragment "${id}" fell back to patch: ${reason}`;
         // Logged where the failure is, not where an exception would have been:
@@ -215,7 +252,10 @@ export class StrategyRunner {
     } catch (error) {
       deps.log('fragment', 'LP0801', error);
       if (isCurrent()) {
-        for (const boundary of plan.boundaries) this.patchFallback(transaction, data, boundary);
+        for (const boundary of plan.boundaries) {
+          state.fragmentRenderOwed.delete(boundary);
+          this.patchFallback(transaction, data, boundary);
+        }
         report = { rendered: 0, failed: plan.boundaries.length, superseded: 0 };
       }
     }
@@ -412,7 +452,9 @@ function planBoundaries(strategy: FragmentStrategy, boundaries: readonly Element
     boundaries,
     strategy,
     covers: (target) =>
-      target.fragmentBoundary !== undefined && covered.has(target.fragmentBoundary),
+      target.fragmentBoundary !== undefined &&
+      (covered.has(target.fragmentBoundary) ||
+        boundaries.some((boundary) => boundary.contains(target.element))),
   };
 }
 

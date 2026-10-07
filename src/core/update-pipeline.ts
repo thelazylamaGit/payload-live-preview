@@ -114,7 +114,10 @@ export class UpdatePipeline {
     state.abortStrategies();
     if (previous !== null && !previous.completed) state.supersededCount += 1;
     state.activeUpdate = transaction;
-    deps.scheduler.acceptRevision(revision);
+    deps.scheduler.acceptRevision(
+      revision,
+      deps.root.querySelector('[data-payload-patch-fields]') !== null,
+    );
     state.updateCount += 1;
     if (message.protocolVersion !== undefined) {
       state.protocol.applyVersion(message.protocolVersion, deps.log);
@@ -189,7 +192,11 @@ export class UpdatePipeline {
   ): void {
     const { deps, state } = this;
     const dependencies = mergeDependencyMaps(deps.dependencies, deps.cache.dependencyMap());
-    const changes = state.changes.diff(data.fields, dependencies);
+    const changes = state.changes.diff(
+      data.fields,
+      dependencies,
+      deps.root.querySelector('[data-payload-patch-fields]') !== null,
+    );
     if (changes.baseline && !refined && deps.autoBind !== 'off') {
       // Once, on the message that describes what the server rendered (ADR 0014
       // §1). The lean profile leaves the search out; esbuild folds the branch.
@@ -201,6 +208,8 @@ export class UpdatePipeline {
       }
     }
     transaction.baseline = changes.baseline;
+    transaction.changedPaths = changes.paths;
+    transaction.structuralPaths = changes.structuralPaths;
     transaction.invalidated = refined ? NOTHING_CHANGED : changes.invalidated;
     transaction.touched = refined
       ? NOTHING_CHANGED
@@ -284,7 +293,7 @@ export class UpdatePipeline {
       void this.strategies.refreshRoute(transaction, data, route);
       return;
     }
-    const plan = this.strategies.planFragments(touched);
+    const plan = this.strategies.planFragments(touched, transaction);
     // Only `skipUnchanged` needs it now; the reveal keeps its own ledger.
     const trackIdentity = deps.skipUnchanged;
     let scheduled = 0;

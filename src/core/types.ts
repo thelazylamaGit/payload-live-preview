@@ -5,7 +5,8 @@ import type { SanitizerPolicyMode } from '@security/sanitizer';
 import type { UpdateSource } from './strategies';
 
 /** Payload's field set plus the DOM-binding categories `html`, `url`, `image` and `structural-array`. */
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array';
+export type FieldType =
+  PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
 
 /** A namespaced project renderer key, so a typo of a built-in type can never become one. */
 export type CustomRendererKey = `${string}:${string}`;
