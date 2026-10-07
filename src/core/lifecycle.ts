@@ -67,10 +67,11 @@ export class LivePreviewRuntime {
         ? { intersectionRootMargin: options.intersectionRootMargin }
         : {},
     );
+    const bindingDebounceMs = options.bindingDebounceMs ?? options.debounceMs;
     const scheduler = new UpdateScheduler(
       markNoWriteCallback((update) => this.writer.apply(update)),
       {
-        ...(options.debounceMs !== undefined ? { debounceMs: options.debounceMs } : {}),
+        ...(bindingDebounceMs !== undefined ? { debounceMs: bindingDebounceMs } : {}),
         ...(options.disableVisibilityGate !== undefined
           ? { disableVisibilityGate: options.disableVisibilityGate }
           : {}),
@@ -174,6 +175,9 @@ export class LivePreviewRuntime {
               log,
             }),
       mergeWindowMs: options.debounceMs ?? DEFAULT_DEBOUNCE_MS,
+      ...(options.bindingDebounceMs !== undefined
+        ? { bindingDebounceMs: options.bindingDebounceMs }
+        : {}),
       scopeBindingsByOwner: options.scopeBindingsByOwner === true,
       lockedOrigin: options.lockedOrigin ?? ((): undefined => undefined),
       skipUnchanged: options.skipUnchanged === true,

@@ -19,7 +19,7 @@
   "totals": {
     "files": 333,
     "suites": 720,
-    "tests": 3033,
+    "tests": 3038,
     "benchmarks": 12
   },
   "groups": {
@@ -62,7 +62,7 @@
     "unit": {
       "files": 276,
       "suites": 645,
-      "tests": 2803,
+      "tests": 2808,
       "benchmarks": 0
     }
   },
@@ -484,7 +484,7 @@
       "path": "tests/unit/adapters/astro-integration.test.ts",
       "group": "unit",
       "suites": 2,
-      "tests": 11,
+      "tests": 12,
       "benchmarks": 0
     },
     {
@@ -939,7 +939,7 @@
       "path": "tests/unit/core/fragment-patch-fields.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 13,
+      "tests": 15,
       "benchmarks": 0
     },
     {
@@ -1156,7 +1156,7 @@
       "path": "tests/unit/core/merge-need.test.ts",
       "group": "unit",
       "suites": 2,
-      "tests": 12,
+      "tests": 13,
       "benchmarks": 0
     },
     {
@@ -1457,7 +1457,7 @@
       "path": "tests/unit/core/update-scheduler-debounce.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 14,
+      "tests": 15,
       "benchmarks": 0
     },
     {

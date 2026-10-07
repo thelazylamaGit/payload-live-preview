@@ -19,6 +19,8 @@ export interface InlineScriptConfig {
   readonly debug?: boolean;
   /** Debounce window for incoming updates in ms. Default `50`. */
   readonly debounceMs?: number;
+  /** DOM-write debounce in ms. Defaults to `debounceMs`; `0` batches on animation frames. */
+  readonly bindingDebounceMs?: number;
   /** Mount the screen-reader live region. Default `true`. */
   readonly enableA11y?: boolean;
   /** Heartbeat timeout in ms; `0` disables it (default), because the admin posts only on edits. */
@@ -89,7 +91,7 @@ export interface InlineScriptConfig {
    * rather than the runtime, whose own fallbacks are the 2.0 rows: `'v1'`
    * writes its four runtime rows into their slots (an explicit option still
    * wins) and relaxes the `mergeDepth` check. The resolved value always
-   * travels, in the last slot, so a reader of the served page knows what an
+   * travels, in its stable slot, so a reader of the served page knows what an
    * empty slot means instead of guessing it — `pll doctor --v2` reads it. The
    * runtime does not: every row the profile decides is already in its slot.
    */
@@ -153,4 +155,5 @@ export const INLINE_CONFIG_KEYS = [
   'autoBind',
   'hydration',
   'defaults',
+  'bindingDebounceMs',
 ] as const satisfies readonly Exclude<keyof InlineScriptConfig, 'runtime'>[];

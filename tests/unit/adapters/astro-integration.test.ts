@@ -1,6 +1,8 @@
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { livePreview } from '@adapters/astro/index';
+import type { LivePreviewGlobalApi } from '@core/runtime';
+import { fireMessage } from '../core/lifecycle-startup-harness';
 
 /** The integration's inline and middleware modes through fake Astro hooks; loader mode has its own file. */
 
@@ -40,13 +42,47 @@ describe('livePreview integration — inline mode', () => {
 
   it('forwards debounce, heartbeat, and debug options into the injected script', () => {
     const injectScript = vi.fn();
-    livePreview({ defaults: 'v1', debug: true, debounceMs: 250, heartbeatMs: 60_000 }).hooks[
-      'astro:config:setup'
-    ]({ injectScript });
+    livePreview({
+      defaults: 'v1',
+      debug: true,
+      debounceMs: 250,
+      bindingDebounceMs: 0,
+      heartbeatMs: 60_000,
+    }).hooks['astro:config:setup']({ injectScript });
     const config = injectedConfig(injectScript.mock.calls[0]![1] as string);
     expect(config[4]).toBe(true);
     expect(config[5]).toBe(250);
     expect(config[7]).toBe(60_000);
+    expect(config[25]).toBe(0);
+  });
+
+  it('executes the generated Astro runtime with frame-coalesced native bindings', async () => {
+    const injectScript = vi.fn();
+    livePreview({
+      defaults: 'v1',
+      allowedOrigins: [ADMIN],
+      debounceMs: 200,
+      bindingDebounceMs: 0,
+      autoBind: 'off',
+    }).hooks['astro:config:setup']({ injectScript });
+    document.body.innerHTML = '<h1 data-payload-field="title">Initial</h1>';
+    vi.stubGlobal('opener', { postMessage: vi.fn() });
+    let api: LivePreviewGlobalApi | undefined;
+    try {
+      // Execute the actual generated asset supplied by the integration.
+      window.eval(injectScript.mock.calls[0]![1] as string);
+      api = (window as { __livePreview?: LivePreviewGlobalApi }).__livePreview;
+      expect(api?.inspect().started).toBe(true);
+      for (let frame = 0; frame < 8; frame += 1) {
+        fireMessage({ type: 'payload-live-preview', data: { title: `Old ${frame}` } });
+        fireMessage({ type: 'payload-live-preview', data: { title: `Latest ${frame}` } });
+        await vi.advanceTimersByTimeAsync(16);
+        expect(document.querySelector('h1')?.textContent).toBe(`Latest ${frame}`);
+      }
+    } finally {
+      api?.destroy();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('forwards skipUnchanged into the trailing wire slot', () => {

@@ -61,6 +61,7 @@ function start(
   options: {
     optIn?: boolean;
     debounceMs?: number;
+    bindingDebounceMs?: number;
     population?: typeof fetch;
     scopeBindingsByOwner?: boolean;
   } = {},
@@ -76,6 +77,9 @@ function start(
     autoBind: 'off',
     enableA11y: false,
     ...(options.debounceMs === undefined ? {} : { debounceMs: options.debounceMs }),
+    ...(options.bindingDebounceMs === undefined
+      ? {}
+      : { bindingDebounceMs: options.bindingDebounceMs }),
     ...(options.population === undefined
       ? {}
       : { dataMerge: { serverURL: 'https://cms.example.com', fetchFn: options.population } }),
@@ -97,6 +101,60 @@ async function baseline(fetchFragment: ReturnType<typeof start>, items = blocks(
 }
 
 describe('explicit fragment patch fields through runtime and HTTP strategy', () => {
+  it('coalesces rapid revisions on each frame independently of the population window', async () => {
+    const population = vi.fn<typeof fetch>(() =>
+      Promise.resolve(new Response(JSON.stringify({ blocks: blocks() }))),
+    );
+    const fetchFragment = start({ debounceMs: 200, bindingDebounceMs: 0, population });
+    await baseline(fetchFragment);
+    population.mockClear();
+    await vi.advanceTimersByTimeAsync(2); // Align with the simulated animation-frame clock.
+    const items = blocks();
+    for (let frame = 1; frame <= 12; frame += 1) {
+      const before = colour().style.backgroundColor;
+      for (let edit = 1; edit <= 3; edit += 1) {
+        items[0]!.colour = '#' + (frame * 3 + edit).toString(16).padStart(6, '0');
+        items[1]!.title = `Frame ${frame}, edit ${edit}`;
+        post(items);
+        await vi.advanceTimersByTimeAsync(2);
+      }
+      expect(colour().style.backgroundColor).toBe(before);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(colour().style.backgroundColor).toBe(`rgb(0, 0, ${frame * 3 + 3})`);
+      expect(document.querySelector('#b h2')?.textContent).toBe(`Frame ${frame}, edit 3`);
+    }
+    expect(fetchFragment).not.toHaveBeenCalled();
+    expect(population).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 25])(
+    'uses the binding window and its four-window deadline (%s)',
+    async (bindingDebounceMs) => {
+      const fetchFragment = start({
+        debounceMs: 200,
+        ...(bindingDebounceMs === undefined ? {} : { bindingDebounceMs }),
+      });
+      await baseline(fetchFragment);
+      const items = blocks();
+      items[0]!.colour = '#000001';
+      post(items);
+      await vi.advanceTimersByTimeAsync(16); // Leading frame opens the burst.
+      let paints = 0;
+      let previous = colour().style.backgroundColor;
+      for (let index = 2; index <= 18; index += 1) {
+        items[0]!.colour = '#' + index.toString(16).padStart(6, '0');
+        post(items);
+        await vi.advanceTimersByTimeAsync(10);
+        if (colour().style.backgroundColor !== previous) paints += 1;
+        previous = colour().style.backgroundColor;
+      }
+      expect(paints).toBe(bindingDebounceMs === undefined ? 0 : 1);
+      await vi.advanceTimersByTimeAsync(250);
+      expect(colour().style.backgroundColor).toBe('rgb(0, 0, 18)');
+      expect(fetchFragment).not.toHaveBeenCalled();
+    },
+  );
+
   it('patches colour including alpha and native text without fragment or population requests', async () => {
     const populated = blocks();
     populated[0]!.image = { id: 'old', url: '/old.png' };
@@ -119,7 +177,7 @@ describe('explicit fragment patch fields through runtime and HTTP strategy', () 
   });
 
   it('renders mixed changes once without competing inner DOM patches', async () => {
-    const fetchFragment = start();
+    const fetchFragment = start({ debounceMs: 200, bindingDebounceMs: 0 });
     await baseline(fetchFragment);
     const pending = deferred<Response>();
     fetchFragment.mockImplementationOnce(() => pending.promise);

@@ -60,6 +60,8 @@ export interface PreviewAdapterOptions<Req = Request> {
   readonly debug?: boolean;
   /** Debounce window for incoming updates. Default 50 ms. */
   readonly debounceMs?: number;
+  /** DOM-write debounce in ms. Defaults to `debounceMs`; `0` batches on animation frames. */
+  readonly bindingDebounceMs?: number;
   /** Heartbeat timeout in ms. Default `0` (off): the Payload admin sends no keepalive. */
   readonly heartbeatMs?: number;
   /** Skip bindings whose value did not change. Default `true`; `defaults: 'v1'` restores `false`. */

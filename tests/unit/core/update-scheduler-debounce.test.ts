@@ -3,6 +3,37 @@ import { UpdateScheduler, type ApplyUpdate, type ScheduledUpdate } from '@core/u
 import { entry, update } from './update-scheduler-harness';
 
 describe('UpdateScheduler — debounce and frame batching', () => {
+  it('preserves one opted-in frame while revisions replace values and rejects stale work', () => {
+    const apply = vi.fn();
+    const frames: FrameRequestCallback[] = [];
+    const cancelFrame = vi.fn();
+    const scheduler = new UpdateScheduler(apply, {
+      debounceMs: 0,
+      isVisible: () => true,
+      getCacheSize: () => 1,
+      scheduleFrame: (callback) => frames.push(callback),
+      cancelFrame,
+    });
+    const target = entry(document.createElement('p'));
+    for (let revision = 1; revision <= 20; revision += 1) {
+      const current = { generation: 1, revision };
+      scheduler.acceptRevision(current, true);
+      scheduler.schedule({ ...update(target, revision), revision: current });
+      scheduler.schedule({
+        ...update(target, 'stale'),
+        revision: { generation: 1, revision: revision - 1 },
+      });
+      vi.advanceTimersByTime(1);
+    }
+    expect(frames).toHaveLength(1);
+    expect(cancelFrame).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    frames[0]!(0);
+    expect(apply).toHaveBeenCalledOnce();
+    expect((apply.mock.calls[0]![0] as ScheduledUpdate).value).toBe(20);
+    scheduler.destroy();
+  });
+
   it('keeps value-returning callbacks compatible with the public void contract', () => {
     const seen: ScheduledUpdate[] = [];
     const apply: ApplyUpdate = (scheduled) => seen.push(scheduled);

@@ -84,6 +84,8 @@ export function bootstrapInlineRuntime(): LivePreviewGlobalApi | undefined {
     onUnfaithfulPatch,
     autoBind = 'off',
     hydration,
+    _defaults,
+    bindingDebounceMs,
   ] = readBuildConfig();
   // `routeStrategy` is destructured only to hold its wire slot: it decides
   // which prelude the generator emitted, and the prelude's presence is what the
@@ -128,6 +130,7 @@ export function bootstrapInlineRuntime(): LivePreviewGlobalApi | undefined {
         }
       : {}),
     debounceMs,
+    ...(bindingDebounceMs !== undefined ? { bindingDebounceMs } : {}),
     heartbeatMs,
     intersectionRootMargin,
     disableVisibilityGate,

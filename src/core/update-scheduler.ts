@@ -87,6 +87,7 @@ export class UpdateScheduler {
   private frameToken = 0;
   /** End of the window the leading write opened; inside it a write waits for the debounce. */
   private windowUntil = 0;
+  private preserveBurst = false;
   private activeRevision: MessageRevision | null = null;
   private activeRevisionCancelled = false;
 
@@ -152,6 +153,7 @@ export class UpdateScheduler {
     if (this.activeRevision !== null && sameRevision(revision, this.activeRevision)) return;
     if (this.activeRevision !== null && compareRevision(revision, this.activeRevision) < 0) return;
     // A newer revision replaces values, not its pending frame or maximum-wait deadline.
+    this.preserveBurst = preserveBurst;
     this.cancelScheduledWork(preserveBurst);
     this.clearWork();
     this.activeRevision = revision;
@@ -269,6 +271,8 @@ export class UpdateScheduler {
   }
 
   private requestFrame(): void {
+    // Opted-in revisions replace queued values without postponing their paint.
+    if (this.preserveBurst && this.frameHandle !== null) return;
     const token = (this.frameToken += 1);
     const handle = this.frameHandle;
     this.frameHandle = null;
