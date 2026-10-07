@@ -3,6 +3,7 @@
 import type { FieldRenderer } from '@core/types';
 import { createTextRenderer } from './text';
 import { richTextRenderer } from './rich-text';
+import { hexColorRenderer } from './hex-color';
 import { htmlRenderer } from './html';
 import { urlRenderer } from './url';
 import { emailRenderer } from './email';
@@ -53,6 +54,7 @@ export function buildBuiltinRenderers(): Readonly<Record<string, FieldRenderer>>
   const stateless: readonly FieldRenderer[] = [
     richTextRenderer,
     htmlRenderer,
+    hexColorRenderer,
     urlRenderer,
     emailRenderer,
     imageRenderer,

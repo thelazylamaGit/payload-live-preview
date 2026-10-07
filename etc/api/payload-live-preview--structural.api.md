@@ -79,7 +79,7 @@ export interface FieldRenderer {
 }
 
 // @public
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array';
+export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
 
 // @internal (undocumented)
 export const ISLAND_ATTRIBUTE = "data-payload-island";

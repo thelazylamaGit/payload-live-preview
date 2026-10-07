@@ -458,3 +458,77 @@ revision's fragment requests; a response that arrives late is discarded;
 identical boundaries in one revision share a request; at most four
 requests run at once (`maxConcurrent` on `createFragmentStrategy()`). Slow
 fragment A can never overwrite fast fragment B.
+
+## Direct bindings inside a fragment
+
+`preview.boundary(id, { dependsOn, patchFields })` explicitly permits **exact bound
+field paths** to update without re-rendering that boundary. The declaration is a
+promise that those values have no other server-rendered effects there: do not opt
+in a field used for conditional markup, layout, or server calculations. A binding
+alone never grants permission. Native text bindings use this contract too.
+
+For example, with the existing request-authorized `preview` helper and fragment
+endpoint, an Astro block list can expose only its safe text and colour slots:
+
+```astro
+---
+// `preview` is the existing createPreviewBindings({ authorization, owner }) helper.
+const { page, preview } = Astro.props;
+const patchFields = page.blocks.flatMap((_, index) => [
+  `blocks.${index}.caption`,
+  `blocks.${index}.colour`,
+]);
+const defaultColour = '#0008';
+---
+<section {...preview.owner()} {...preview.boundary('page-blocks', {
+  dependsOn: ['blocks'],
+  patchFields,
+})}>
+  {page.blocks.map((block, index) => (
+    <article data-payload-key={block.id}>
+      <p {...preview.bind(`blocks.${index}.caption`)}>{block.caption}</p>
+      <div
+        {...preview.bind(`blocks.${index}.colour`, {
+          cssProperty: 'background-color',
+          cssDefault: defaultColour,
+        })}
+        style={`background-color: ${block.colour || defaultColour}`}
+      />
+    </article>
+  ))}
+</section>
+```
+
+Keep rendering your existing block components in the fragment endpoint, and have
+those components emit the same indexed bindings. `patchFields` uses the existing
+dotted field paths, including numeric array indices; it has no wildcards and does
+not inherit permission to descendants. `bindByPath` drops array indices, so use
+`bind` for an indexed instance. Arrays need stable item `id`s for direct edits;
+without them changes conservatively render on the server. Reordering, insertion,
+removal, block-type changes, unknown or unbound paths, initial synchronisation and
+forced renders keep the server path. Reordering refreshes bindings immediately.
+New slots beyond the declared indices remain server-rendered until the boundary's
+configuration is updated (for example, by a page render).
+
+If an affected boundary has any server work, it renders once and its inner
+bindings are left alone. Other boundaries can patch independently. A newer direct
+edit takes over pending server work with the latest fields; it cannot drop an
+unfinished image edit, and superseded responses cannot apply.
+
+`cssProperty: 'background-color'` selects the built-in `hexColor` renderer. This is
+the only supported CSS property. It accepts `#rgb`, `#rgba`, `#rrggbb` and
+`#rrggbbaa`, including alpha. `null` or `''` uses `cssDefault`; without a default it
+removes just the inline background colour, revealing stylesheet/inherited
+behaviour. Use the same fallback in your server render. A missing field retains
+the usual runtime handling. Invalid/intermediate colours and invalid defaults
+leave the DOM unchanged. CSS expressions, named colours, other properties and
+complete `style` attribute writes are not enabled. Raw attributes are
+`data-payload-type="hexColor"`, `data-payload-css-property="background-color"` and
+optional `data-payload-css-default="#0008"`.
+
+Scheduling retains its defaults: the leading frame, 50 ms debounce and maximum
+wait of four debounce windows. On pages opting into `patchFields`, pending frames and maximum-wait deadlines survive
+new revisions, so sustained dragging continues to display the latest values.
+There is no extra runtime on public pages: the existing authorization helper
+suppresses both the boundary configuration and colour-binding attributes.
+Without `patchFields`, fragment routing retains its existing behaviour.

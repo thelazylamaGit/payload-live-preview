@@ -148,10 +148,11 @@ export class UpdateScheduler {
    * Make `revision` the sole revision allowed to schedule, flush or replay.
    * Older buffered work is dropped even if the new revision is later cancelled.
    */
-  acceptRevision(revision: MessageRevision): void {
+  acceptRevision(revision: MessageRevision, preserveBurst = false): void {
     if (this.activeRevision !== null && sameRevision(revision, this.activeRevision)) return;
     if (this.activeRevision !== null && compareRevision(revision, this.activeRevision) < 0) return;
-    this.cancelScheduledWork();
+    // A newer revision replaces values, not its pending frame or maximum-wait deadline.
+    this.cancelScheduledWork(preserveBurst);
     this.clearWork();
     this.activeRevision = revision;
     this.activeRevisionCancelled = false;
@@ -383,18 +384,20 @@ export class UpdateScheduler {
     this.deadlineTimer = null;
   }
 
-  private cancelScheduledWork(): void {
+  private cancelScheduledWork(preserveBurst = false): void {
     const debounceTimer = this.debounceTimer;
     const frameHandle = this.frameHandle;
     // Revoke tokens before calling host cancellation, so a hook that
     // schedules newer work is not clobbered by this older cleanup.
     this.debounceToken += 1;
-    this.frameToken += 1;
+    if (!preserveBurst) this.frameToken += 1;
     this.debounceTimer = null;
-    this.frameHandle = null;
-    this.clearDeadline();
+    if (!preserveBurst) {
+      this.frameHandle = null;
+      this.clearDeadline();
+    }
     if (debounceTimer !== null) clearTimeout(debounceTimer);
-    if (frameHandle !== null) this.cancelFrame(frameHandle);
+    if (!preserveBurst && frameHandle !== null) this.cancelFrame(frameHandle);
   }
 }
 

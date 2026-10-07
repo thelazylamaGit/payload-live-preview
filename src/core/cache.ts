@@ -78,6 +78,7 @@ export function resolveBindingOwner(element: Element): string | undefined {
 const CUSTOM_RENDERER_KEY = /^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/i;
 
 const VALID_FIELD_TYPES: ReadonlySet<FieldType> = new Set<FieldType>([
+  'hexColor',
   'text',
   'textarea',
   'richText',

@@ -39,6 +39,8 @@ export interface UpdateTransaction {
   readonly forceRender: boolean;
   /** Top-level fields whose value changed since the previous message, plus their dependents. */
   touched: ReadonlySet<string>;
+  changedPaths?: ReadonlySet<string>;
+  structuralPaths?: ReadonlySet<string>;
   /** The connection's first message, where every field counts as changed. */
   baseline: boolean;
   /** Dependents of changed fields; re-applied even when their own value is unchanged. */
@@ -155,6 +157,7 @@ export class RuntimeState {
   readonly revealLedger = new RevealLedger();
   readonly fragmentStats = { rendered: 0, failed: 0, superseded: 0 };
   readonly routeStats = { refreshes: 0, failed: 0, refused: 0, loopStopped: 0 };
+  readonly fragmentRenderOwed = new Set<Element>();
   fragmentController: AbortController | null = null;
   routeController: AbortController | null = null;
   /** The trailing run a refused refresh asked for; at most one, and always the newest. */

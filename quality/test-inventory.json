@@ -17,9 +17,9 @@
     "vitest.stryker.config.ts"
   ],
   "totals": {
-    "files": 332,
-    "suites": 717,
-    "tests": 3018,
+    "files": 333,
+    "suites": 720,
+    "tests": 3033,
     "benchmarks": 12
   },
   "groups": {
@@ -60,9 +60,9 @@
       "benchmarks": 0
     },
     "unit": {
-      "files": 275,
-      "suites": 642,
-      "tests": 2788,
+      "files": 276,
+      "suites": 645,
+      "tests": 2803,
       "benchmarks": 0
     }
   },
@@ -936,6 +936,13 @@
       "benchmarks": 0
     },
     {
+      "path": "tests/unit/core/fragment-patch-fields.test.ts",
+      "group": "unit",
+      "suites": 1,
+      "tests": 13,
+      "benchmarks": 0
+    },
+    {
       "path": "tests/unit/core/fragment-strategy.test.ts",
       "group": "unit",
       "suites": 1,
@@ -1568,15 +1575,15 @@
     {
       "path": "tests/unit/dsl/bind.test.ts",
       "group": "unit",
-      "suites": 3,
-      "tests": 13,
+      "suites": 4,
+      "tests": 14,
       "benchmarks": 0
     },
     {
       "path": "tests/unit/dsl/preview-bindings.test.ts",
       "group": "unit",
-      "suites": 4,
-      "tests": 16,
+      "suites": 5,
+      "tests": 17,
       "benchmarks": 0
     },
     {

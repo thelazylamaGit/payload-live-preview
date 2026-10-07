@@ -348,6 +348,7 @@ export class LivePreviewRuntime {
   private release(): boolean {
     const { state, deps } = this;
     state.activeUpdate = null;
+    state.fragmentRenderOwed.clear();
     state.started = false;
     this.scope?.close();
     this.scope = null;

@@ -40,6 +40,8 @@ export interface BindOptions {
     readonly alt?: string;
     readonly arrayTemplate?: string;
     readonly attribute?: string;
+    readonly cssDefault?: string;
+    readonly cssProperty?: 'background-color';
     readonly href?: string;
     readonly html?: boolean;
     readonly locale?: string;
@@ -244,6 +246,10 @@ export interface FieldBindingAttributes {
     // (undocumented)
     readonly 'data-payload-attribute'?: string;
     // (undocumented)
+    readonly 'data-payload-css-default'?: string;
+    // (undocumented)
+    readonly 'data-payload-css-property'?: 'background-color';
+    // (undocumented)
     readonly 'data-payload-field': string;
     // (undocumented)
     readonly 'data-payload-href'?: string;
@@ -283,7 +289,7 @@ type FieldTransform = (value: unknown, context: {
 }) => unknown;
 
 // @public
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array';
+export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
 
 // @public
 export interface FragmentBoundaryAttributes {
@@ -293,12 +299,15 @@ export interface FragmentBoundaryAttributes {
     readonly 'data-payload-fragment': string;
     // (undocumented)
     readonly 'data-payload-fragment-key'?: string;
+    // (undocumented)
+    readonly 'data-payload-patch-fields'?: string;
 }
 
 // @public (undocumented)
 export interface FragmentBoundaryOptions {
     readonly dependsOn?: readonly string[];
     readonly key?: string;
+    readonly patchFields?: readonly string[];
 }
 
 // @public

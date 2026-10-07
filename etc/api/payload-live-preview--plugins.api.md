@@ -163,7 +163,7 @@ export type FieldTransform = (value: unknown, context: {
 }) => unknown;
 
 // @public
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array';
+export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
 
 // @public
 export const highlightPlugin: LivePreviewPlugin;
