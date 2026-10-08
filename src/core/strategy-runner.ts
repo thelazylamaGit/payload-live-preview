@@ -7,6 +7,8 @@ import type { PayloadLivePreviewData } from '@/types/payload-protocol';
 import { trustedHtml } from '@security/trusted-types';
 import { reportUnboundChange } from './fidelity';
 import { bindingValue } from './field-value';
+import { isBindingInScope, messageOwnerKeys, readDocumentId } from './binding-owner';
+import { resolveBindingOwner } from './cache';
 import { canPatchFragment } from './fragment-patches';
 import { morphElement } from './morph';
 import type { RuntimeDeps, RuntimeState, UpdateTransaction } from './runtime-state';
@@ -52,13 +54,28 @@ export class StrategyRunner {
   ): FragmentPlan | null {
     const strategy = this.deps.strategies.fragment;
     if (strategy === undefined) return null;
+    const inScope = (boundary: Element): boolean => {
+      if (!this.deps.scopeBindingsByOwner || transaction === undefined) return true;
+      return isBindingInScope(
+        resolveBindingOwner(boundary),
+        messageOwnerKeys({
+          globalSlug: transaction.message.globalSlug,
+          collectionSlug: transaction.message.collectionSlug,
+          documentId: readDocumentId(
+            transaction.latestData?.fields ?? transaction.message.data ?? {},
+          ),
+        }),
+      );
+    };
     const planned = strategy
       .plan(this.deps.root, touched)
+      .filter(inScope)
       .filter(
         (boundary) =>
           transaction === undefined ||
           transaction.baseline ||
           transaction.forceRender ||
+          transaction.replayFragments === true ||
           !canPatchFragment(
             this.deps,
             boundary,
@@ -68,12 +85,12 @@ export class StrategyRunner {
       );
     for (const boundary of this.state.fragmentRenderOwed) {
       if (!this.deps.root.contains(boundary)) this.state.fragmentRenderOwed.delete(boundary);
-      if (this.deps.root.contains(boundary) && !planned.includes(boundary)) planned.push(boundary);
+      if (this.deps.root.contains(boundary) && inScope(boundary) && !planned.includes(boundary)) {
+        planned.push(boundary);
+      }
     }
     for (const boundary of planned) {
-      if (boundary.hasAttribute('data-payload-patch-fields')) {
-        this.state.fragmentRenderOwed.add(boundary);
-      }
+      this.state.fragmentRenderOwed.add(boundary);
     }
     return planBoundaries(strategy, planned);
   }
@@ -181,14 +198,19 @@ export class StrategyRunner {
     plan: FragmentPlan,
   ): Promise<void> {
     const { deps, state } = this;
-    const controller = new AbortController();
-    state.fragmentController = controller;
     // Escalated renders also survive a later direct edit.
     for (const boundary of plan.boundaries) {
-      if (boundary.hasAttribute('data-payload-patch-fields')) {
-        state.fragmentRenderOwed.add(boundary);
-      }
+      state.fragmentRenderOwed.add(boundary);
     }
+    // Same-revision HTTP requests deduplicate. Aborting one here would make
+    // its replacement share the aborted response. Finish it, then replay any
+    // refinement from the latest values instead.
+    if (state.fragmentController !== null) {
+      transaction.fragmentReapply = true;
+      return;
+    }
+    const controller = new AbortController();
+    state.fragmentController = controller;
     const isCurrent = (): boolean => state.isCurrent(transaction) && !controller.signal.aborted;
     const { emitter } = deps;
     const { message } = transaction;
@@ -217,7 +239,10 @@ export class StrategyRunner {
         this.patchFallback(transaction, data, boundary);
       },
       rendered: (element, id, key) => {
-        if (isCurrent()) this.state.fragmentRenderOwed.delete(element);
+        if (isCurrent()) {
+          this.state.fragmentRenderOwed.delete(element);
+          transaction.fragmentFailures?.delete(element);
+        }
         transaction.pendingFragments -= 1;
         void emitter.emitWhile(
           'fragmentRender',
@@ -226,7 +251,7 @@ export class StrategyRunner {
         );
       },
       failed: (element, id, key, code, reason) => {
-        if (isCurrent()) this.state.fragmentRenderOwed.delete(element);
+        if (isCurrent()) this.noteFragmentFailure(transaction, element, code === 'LP0801');
         transaction.pendingFragments -= 1;
         const detail = `fragment "${id}" fell back to patch: ${reason}`;
         // Logged where the failure is, not where an exception would have been:
@@ -253,7 +278,7 @@ export class StrategyRunner {
       deps.log('fragment', 'LP0801', error);
       if (isCurrent()) {
         for (const boundary of plan.boundaries) {
-          state.fragmentRenderOwed.delete(boundary);
+          this.noteFragmentFailure(transaction, boundary, true);
           this.patchFallback(transaction, data, boundary);
         }
         report = { rendered: 0, failed: plan.boundaries.length, superseded: 0 };
@@ -264,7 +289,33 @@ export class StrategyRunner {
     state.fragmentStats.superseded += report.superseded;
     if (!isCurrent()) return;
     if (state.fragmentController === controller) state.fragmentController = null;
-    transaction.pendingFragments = 0;
+    // Custom strategies may report an all-success batch without per-boundary
+    // callbacks. A partial report cannot tell us which remaining boundary won.
+    if (report.rendered === plan.boundaries.length) {
+      for (const boundary of plan.boundaries) {
+        state.fragmentRenderOwed.delete(boundary);
+        transaction.fragmentFailures?.delete(boundary);
+      }
+    }
+    if (
+      transaction.fragmentReapply === true ||
+      (data !== transaction.latestData && transaction.latestData !== undefined)
+    ) {
+      transaction.fragmentReapply = false;
+      if (data !== transaction.latestData) {
+        for (const boundary of plan.boundaries) state.fragmentRenderOwed.add(boundary);
+      }
+      const next = this.planFragments(new Set(), transaction);
+      if (next !== null && next.boundaries.length > 0) {
+        transaction.pendingFragments = next.boundaries.length;
+        void this.runFragments(transaction, transaction.latestData ?? data, next);
+        return;
+      }
+    }
+    transaction.pendingFragments = plan.boundaries.filter((boundary) =>
+      state.fragmentRenderOwed.has(boundary),
+    ).length;
+    this.armFragmentRetry(transaction, data, plan.strategy);
     // A rendered boundary holds the server's markup, which carries no stamp: the
     // guesses in it go back on, as after a refresh, before the revision counts
     // as complete. Without this a guess in a boundary did not outlive the first
@@ -288,6 +339,43 @@ export class StrategyRunner {
       },
       isCurrent,
     );
+  }
+
+  private noteFragmentFailure(
+    transaction: UpdateTransaction,
+    boundary: Element,
+    transient: boolean,
+  ): void {
+    const failures = (transaction.fragmentFailures ??= new Map());
+    failures.set(boundary, transient ? (failures.get(boundary) ?? 0) + 1 : 3);
+  }
+
+  /** Keep failed render debt visible; retry only transient failures, twice, using the latest values. */
+  private armFragmentRetry(
+    transaction: UpdateTransaction,
+    data: PayloadLivePreviewData,
+    strategy: FragmentStrategy,
+  ): void {
+    const { state } = this;
+    if (state.fragmentRetry !== null) return;
+    const retryable = (): Element[] =>
+      [...state.fragmentRenderOwed].filter((boundary) => {
+        const attempts = transaction.fragmentFailures?.get(boundary);
+        return this.deps.root.contains(boundary) && attempts !== undefined && attempts < 3;
+      });
+    if (retryable().length === 0) return;
+    state.fragmentRetry = setTimeout(() => {
+      state.fragmentRetry = null;
+      if (!state.isCurrent(transaction)) return;
+      const boundaries = retryable();
+      if (boundaries.length === 0) return;
+      transaction.pendingFragments = boundaries.length;
+      void this.runFragments(
+        transaction,
+        transaction.latestData ?? data,
+        planBoundaries(strategy, boundaries),
+      );
+    }, 200);
   }
 
   /** Refresh the route once per revision, then re-apply the revision onto the fresh markup. */
@@ -364,6 +452,7 @@ export class StrategyRunner {
     if (!isCurrent()) return;
     if (state.routeController === controller) state.routeController = null;
     if (outcome === 'refreshed') {
+      data = transaction.latestData ?? data;
       stats.refreshes += 1;
       // The route rendered the saved document; nothing on the page is "last applied" any more.
       state.lastAppliedIdentity = new WeakMap();
@@ -372,7 +461,12 @@ export class StrategyRunner {
       this.host.restoreGuesses(transaction, data);
       this.host.rebuildCache();
       if (!isCurrent()) return;
+      // Fresh saved HTML invalidates every fragment's render, even if merge
+      // refinement emptied the last-message diff. Bypass direct patch checks
+      // only for this replay; subsequent edits retain their patch fast path.
+      transaction.replayFragments = true;
       this.host.reapply(transaction, data);
+      transaction.replayFragments = false;
       if (deps.emitter.listenerCount('afterUpdate') > 0) {
         void deps.emitter.emitWhile(
           'afterUpdate',
@@ -398,7 +492,7 @@ export class StrategyRunner {
     else if (outcome === 'refused') stats.refused += 1;
     // Either way the page shows what it can now: the window holds back the
     // server, not the bindings this revision could already have written.
-    this.host.reapply(transaction, data);
+    this.host.reapply(transaction, transaction.latestData ?? data);
   }
 
   /** LP0806, once: a fragment boundary with no handler is patched instead. */

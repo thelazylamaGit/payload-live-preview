@@ -18,6 +18,21 @@ the part that needs a threat model before an endpoint.
 
 ## Decision
 
+Recovery addendum (2026-10-09): unfinished fragment renders survive superseding
+snapshots, including identical snapshots and boundaries without patch fields.
+Interrupted route requests are carried into the next revision. After saved
+route HTML replaces the DOM, affected fragments replay the latest resolved
+unsaved document, independently of merge refinement's edit diff and within
+the message's owner scope. Ordinary edits retain the direct patch fast path.
+
+Transient fragment failures (`LP0801`, including timeouts) keep their render
+debt and receive at most two automatic retries, 200 ms apart, using the latest
+resolved state. Supersession and shutdown cancel the retry timer. Protocol and
+authorization failures receive no automatic retry. Exhausted failures remain
+incomplete and visible through failure events and inspection counters; a
+later accepted snapshot can attempt the owed render again. Binding fallback
+still runs, but does not prove that the whole fragment is current.
+
 ### 1. Markup and runtime contract
 
 - A boundary is an element with `data-payload-fragment="<id>"`; `<id>` is a

@@ -17,9 +17,9 @@
     "vitest.stryker.config.ts"
   ],
   "totals": {
-    "files": 334,
-    "suites": 720,
-    "tests": 3040,
+    "files": 336,
+    "suites": 722,
+    "tests": 3051,
     "benchmarks": 12
   },
   "groups": {
@@ -42,9 +42,9 @@
       "benchmarks": 0
     },
     "integration": {
-      "files": 21,
-      "suites": 24,
-      "tests": 101,
+      "files": 22,
+      "suites": 25,
+      "tests": 102,
       "benchmarks": 0
     },
     "real-payload": {
@@ -60,9 +60,9 @@
       "benchmarks": 0
     },
     "unit": {
-      "files": 276,
-      "suites": 645,
-      "tests": 2808,
+      "files": 277,
+      "suites": 646,
+      "tests": 2818,
       "benchmarks": 0
     }
   },
@@ -412,6 +412,13 @@
     },
     {
       "path": "tests/integration/runtime-sanitizer-policy.test.ts",
+      "group": "integration",
+      "suites": 1,
+      "tests": 1,
+      "benchmarks": 0
+    },
+    {
+      "path": "tests/integration/runtime-strategy-recovery.test.ts",
       "group": "integration",
       "suites": 1,
       "tests": 1,
@@ -1395,6 +1402,13 @@
       "group": "unit",
       "suites": 2,
       "tests": 11,
+      "benchmarks": 0
+    },
+    {
+      "path": "tests/unit/core/strategy-recovery.test.ts",
+      "group": "unit",
+      "suites": 1,
+      "tests": 10,
       "benchmarks": 0
     },
     {

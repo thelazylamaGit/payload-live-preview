@@ -3,7 +3,11 @@
  * runs (`RuntimeState`). Both are shared by the pipeline collaborators.
  */
 
-import type { PayloadFieldSchema, PayloadLivePreviewMessage } from '@/types/payload-protocol';
+import type {
+  PayloadFieldSchema,
+  PayloadLivePreviewData,
+  PayloadLivePreviewMessage,
+} from '@/types/payload-protocol';
 import type { EventEmitter } from '@events/emitter';
 import type { SchemaIndex } from '@schema/index';
 import type { SanitizerPolicyMode } from '@security/sanitizer';
@@ -63,6 +67,14 @@ export interface UpdateTransaction {
   cancelled: boolean;
   /** Terminal: the scheduled writes reached the DOM (or there were none). */
   completed: boolean;
+  /** Latest resolved values, including population that arrived during a strategy request. */
+  latestData?: PayloadLivePreviewData;
+  /** Failed attempts per boundary in this revision; two automatic retries at most. */
+  fragmentFailures?: Map<Element, number>;
+  /** Saved route markup needs a full fragment replay, independent of the edit diff. */
+  replayFragments?: boolean;
+  /** A refinement arrived while this revision's fragment batch was running. */
+  fragmentReapply?: boolean;
 }
 
 export interface RuntimeDeps {
@@ -160,6 +172,7 @@ export class RuntimeState {
   readonly routeStats = { refreshes: 0, failed: 0, refused: 0, loopStopped: 0 };
   readonly fragmentRenderOwed = new Set<Element>();
   fragmentController: AbortController | null = null;
+  fragmentRetry: ReturnType<typeof setTimeout> | null = null;
   routeController: AbortController | null = null;
   /** The trailing run a refused refresh asked for; at most one, and always the newest. */
   routeRetry: ReturnType<typeof setTimeout> | null = null;
@@ -188,6 +201,14 @@ export class RuntimeState {
 
   complete(transaction: UpdateTransaction): void {
     if (transaction.completed) return;
+    if (
+      transaction.pendingFragments > 0 ||
+      (transaction.fragmentFailures?.size ?? 0) > 0 ||
+      this.routeController !== null ||
+      this.routeRetry !== null
+    ) {
+      return;
+    }
     transaction.completed = true;
     this.completedCount += 1;
   }
@@ -200,6 +221,11 @@ export class RuntimeState {
    * it plan the refresh its own diff would not.
    */
   abortStrategies(): void {
+    if (this.fragmentRetry !== null) {
+      clearTimeout(this.fragmentRetry);
+      this.fragmentRetry = null;
+    }
+    if (this.routeController !== null) this.routeRefreshOwed = true;
     if (this.routeRetry !== null) {
       clearTimeout(this.routeRetry);
       this.routeRetry = null;
