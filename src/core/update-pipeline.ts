@@ -192,6 +192,7 @@ export class UpdatePipeline {
     refined: boolean,
   ): void {
     const { deps, state } = this;
+    transaction.latestData = data;
     const dependencies = mergeDependencyMaps(deps.dependencies, deps.cache.dependencyMap());
     const changes = state.changes.diff(
       data.fields,
@@ -294,7 +295,10 @@ export class UpdatePipeline {
       void this.strategies.refreshRoute(transaction, data, route);
       return;
     }
-    const plan = this.strategies.planFragments(touched, transaction);
+    const plan = this.strategies.planFragments(
+      transaction.replayFragments === true ? new Set(Object.keys(data.fields)) : touched,
+      transaction,
+    );
     // Only `skipUnchanged` needs it now; the reveal keeps its own ledger.
     const trackIdentity = deps.skipUnchanged;
     let scheduled = 0;
