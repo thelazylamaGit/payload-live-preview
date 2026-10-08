@@ -47,6 +47,7 @@ export function defaultSendReady(origins: readonly string[]): void {
   if (typeof window === 'undefined') return;
   const targets: Window[] = [];
   if (window.parent !== window) targets.push(window.parent);
-  if (window.opener instanceof Window) targets.push(window.opener);
+  // A cross-origin opener is a WindowProxy that fails local constructor checks.
+  if (window.opener != null) targets.push(window.opener as Window);
   MessageBus.sendReady(targets, origins);
 }
