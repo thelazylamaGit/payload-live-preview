@@ -4,16 +4,15 @@
  */
 
 import type { PayloadLivePreviewData } from '@/types/payload-protocol';
-import { trustedHtml } from '@security/trusted-types';
 import { reportUnboundChange } from './fidelity';
 import { bindingValue } from './field-value';
 import { isBindingInScope, messageOwnerKeys, readDocumentId } from './binding-owner';
 import { resolveBindingOwner } from './cache';
 import { canPatchFragment } from './fragment-patches';
-import { morphElement } from './morph';
+import { FragmentWorkRunner } from './fragment-work';
 import type { RuntimeDeps, RuntimeState, UpdateTransaction } from './runtime-state';
-import type { FragmentContext, FragmentStrategy, RouteOutcome, RouteStrategy } from './strategies';
-import { KEY_ATTRIBUTE } from './structural-applier';
+import type { FragmentStrategy, RouteOutcome, RouteStrategy } from './strategies';
+import type { ScheduledUpdate } from './update-scheduler';
 import { warnFragmentFallback, warnUnsupportedStrategy } from './strategy-warnings';
 import { unboundChangedFields, type OwnerScope } from './unbound-fields';
 import type { CachedElement } from './types';
@@ -28,6 +27,11 @@ export interface StrategyHost {
     isCurrent: () => boolean,
   ) => unknown;
   readonly rebuildCache: () => void;
+  readonly writeFragment: (
+    update: ScheduledUpdate,
+    transaction: UpdateTransaction,
+    isCurrent: () => boolean,
+  ) => boolean;
   /** A server render — the route, or a fragment boundary — dropped the stamps a guess lives by; look for the baseline's guesses again (ADR 0014). */
   readonly restoreGuesses: (transaction: UpdateTransaction, data: PayloadLivePreviewData) => void;
   /** Scroll to the binding this revision marked, if it has not been revealed yet. */
@@ -42,11 +46,25 @@ export interface FragmentPlan {
 }
 
 export class StrategyRunner {
+  private readonly fragments: FragmentWorkRunner;
   constructor(
     private readonly deps: RuntimeDeps,
     private readonly state: RuntimeState,
     private readonly host: StrategyHost,
-  ) {}
+  ) {
+    this.fragments = new FragmentWorkRunner(deps, state, {
+      ...host,
+      fallback: (transaction, data, boundary) => {
+        this.patchFallback(transaction, data, boundary);
+      },
+      failure: (transaction, boundary, transient) => {
+        this.noteFragmentFailure(transaction, boundary, transient);
+      },
+      retry: (transaction, data, strategy) => {
+        this.armFragmentRetry(transaction, data, strategy);
+      },
+    });
+  }
 
   planFragments(
     touched: ReadonlySet<string>,
@@ -83,6 +101,7 @@ export class StrategyRunner {
             transaction.structuralPaths,
           ),
       );
+    if (transaction !== undefined) this.fragments.reconcile(transaction, planned);
     for (const boundary of this.state.fragmentRenderOwed) {
       if (!this.deps.root.contains(boundary)) this.state.fragmentRenderOwed.delete(boundary);
       if (this.deps.root.contains(boundary) && inScope(boundary) && !planned.includes(boundary)) {
@@ -192,156 +211,12 @@ export class StrategyRunner {
     return false;
   }
 
-  async runFragments(
+  runFragments(
     transaction: UpdateTransaction,
     data: PayloadLivePreviewData,
     plan: FragmentPlan,
   ): Promise<void> {
-    const { deps, state } = this;
-    // Escalated renders also survive a later direct edit.
-    for (const boundary of plan.boundaries) {
-      state.fragmentRenderOwed.add(boundary);
-    }
-    // Same-revision HTTP requests deduplicate. Aborting one here would make
-    // its replacement share the aborted response. Finish it, then replay any
-    // refinement from the latest values instead.
-    if (state.fragmentController !== null) {
-      transaction.fragmentReapply = true;
-      return;
-    }
-    const controller = new AbortController();
-    state.fragmentController = controller;
-    const isCurrent = (): boolean => state.isCurrent(transaction) && !controller.signal.aborted;
-    const { emitter } = deps;
-    const { message } = transaction;
-    const revision = transaction.revision.revision;
-    const receivedAt = transaction.receivedAt;
-    const context: FragmentContext = {
-      root: deps.root,
-      revision,
-      receivedAt,
-      fields: data.fields,
-      locale: transaction.locale,
-      collectionSlug:
-        typeof message.collectionSlug === 'string' ? message.collectionSlug : undefined,
-      globalSlug: typeof message.globalSlug === 'string' ? message.globalSlug : undefined,
-      signal: controller.signal,
-      isCurrent,
-      log: (code, detail) => {
-        deps.log('fragment', code, detail);
-      },
-      morph: (boundary, html, patchFields) => {
-        morphFragment(boundary, html);
-        if (patchFields !== undefined) {
-          boundary.setAttribute('data-payload-patch-fields', patchFields.join(','));
-        }
-        // Indexed patch bindings must follow the server's new order immediately.
-        if (boundary.hasAttribute('data-payload-patch-fields')) this.host.rebuildCache();
-      },
-      patch: (boundary) => {
-        this.patchFallback(transaction, data, boundary);
-      },
-      rendered: (element, id, key) => {
-        if (isCurrent()) {
-          this.state.fragmentRenderOwed.delete(element);
-          transaction.fragmentFailures?.delete(element);
-        }
-        transaction.pendingFragments -= 1;
-        void emitter.emitWhile(
-          'fragmentRender',
-          { element, id, key, status: 'rendered', revision, receivedAt },
-          isCurrent,
-        );
-      },
-      failed: (element, id, key, code, reason) => {
-        if (isCurrent()) this.noteFragmentFailure(transaction, element, code === 'LP0801');
-        transaction.pendingFragments -= 1;
-        const detail = `fragment "${id}" fell back to patch: ${reason}`;
-        // Logged where the failure is, not where an exception would have been:
-        // the supplied strategy answers a timeout or a refusal with an outcome
-        // and never throws, so the `catch` around `render()` below is not on
-        // this path and its LP0801 reached no log sink at all.
-        deps.log('fragment', code, detail);
-        void emitter.emitWhile(
-          'error',
-          { error: new Error(detail), context: 'fragment', code },
-          isCurrent,
-        );
-        void emitter.emitWhile(
-          'fragmentRender',
-          { element, id, key, status: 'failed', code, revision, receivedAt },
-          isCurrent,
-        );
-      },
-    };
-    let report = { rendered: 0, failed: 0, superseded: 0 };
-    try {
-      report = await plan.strategy.render(context, plan.boundaries);
-    } catch (error) {
-      deps.log('fragment', 'LP0801', error);
-      if (isCurrent()) {
-        for (const boundary of plan.boundaries) {
-          this.noteFragmentFailure(transaction, boundary, true);
-          this.patchFallback(transaction, data, boundary);
-        }
-        report = { rendered: 0, failed: plan.boundaries.length, superseded: 0 };
-      }
-    }
-    state.fragmentStats.rendered += report.rendered;
-    state.fragmentStats.failed += report.failed;
-    state.fragmentStats.superseded += report.superseded;
-    if (!isCurrent()) return;
-    if (state.fragmentController === controller) state.fragmentController = null;
-    // Custom strategies may report an all-success batch without per-boundary
-    // callbacks. A partial report cannot tell us which remaining boundary won.
-    if (report.rendered === plan.boundaries.length) {
-      for (const boundary of plan.boundaries) {
-        state.fragmentRenderOwed.delete(boundary);
-        transaction.fragmentFailures?.delete(boundary);
-      }
-    }
-    if (
-      transaction.fragmentReapply === true ||
-      (data !== transaction.latestData && transaction.latestData !== undefined)
-    ) {
-      transaction.fragmentReapply = false;
-      if (data !== transaction.latestData) {
-        for (const boundary of plan.boundaries) state.fragmentRenderOwed.add(boundary);
-      }
-      const next = this.planFragments(new Set(), transaction);
-      if (next !== null && next.boundaries.length > 0) {
-        transaction.pendingFragments = next.boundaries.length;
-        void this.runFragments(transaction, transaction.latestData ?? data, next);
-        return;
-      }
-    }
-    transaction.pendingFragments = plan.boundaries.filter((boundary) =>
-      state.fragmentRenderOwed.has(boundary),
-    ).length;
-    this.armFragmentRetry(transaction, data, plan.strategy);
-    // A rendered boundary holds the server's markup, which carries no stamp: the
-    // guesses in it go back on, as after a refresh, before the revision counts
-    // as complete. Without this a guess in a boundary did not outlive the first
-    // message, which renders the boundary as well.
-    if (report.rendered > 0) this.host.restoreGuesses(transaction, data);
-    if (deps.scheduler.pendingCount === 0) state.complete(transaction);
-    // The edited field may be one the server just rendered: its element is only
-    // in place now, so this is the earliest point it can be scrolled to.
-    this.host.revealPending(transaction);
-    if (!isCurrent()) return;
-    if (report.rendered === 0 || emitter.listenerCount('afterUpdate') === 0) return;
-    void emitter.emitWhile(
-      'afterUpdate',
-      {
-        data,
-        updatedCount: report.rendered,
-        durationMs: Date.now() - receivedAt,
-        revision,
-        receivedAt,
-        source: 'fragment',
-      },
-      isCurrent,
-    );
+    return this.fragments.run(transaction, data, plan);
   }
 
   private noteFragmentFailure(
@@ -430,6 +305,7 @@ export class StrategyRunner {
     strategy: RouteStrategy,
   ): Promise<void> {
     const { deps, state } = this;
+    this.fragments.abort();
     const stats = state.routeStats;
     const controller = new AbortController();
     state.routeController = controller;
@@ -553,13 +429,4 @@ function planBoundaries(strategy: FragmentStrategy, boundaries: readonly Element
       (covered.has(target.fragmentBoundary) ||
         boundaries.some((boundary) => boundary.contains(target.element))),
   };
-}
-
-/** Morph server-rendered HTML into the boundary, keeping focus and visitor state. */
-function morphFragment(boundary: Element, html: string): void {
-  const template = boundary.ownerDocument.createElement('template');
-  template.innerHTML = trustedHtml(html);
-  const rendered = boundary.cloneNode(false) as Element;
-  rendered.append(template.content);
-  morphElement(boundary, rendered, { keyAttributes: [KEY_ATTRIBUTE] });
 }

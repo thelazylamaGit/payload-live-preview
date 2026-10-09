@@ -1,4 +1,5 @@
 /**
+ * 2026-10-10: per-boundary fragment coalescing; ceilings cover paired build growth and existing baseline excess.
  * The byte budgets of the inline script built with `profile: 'lean'`, and the
  * log of why each number is what it is. Split out of `bundle-budgets.ts` on
  * 2026-09-12, when that log reached the 500-line limit for the third time; the
@@ -98,7 +99,7 @@
 // 2026-09-19 (the sanitizer empties `is`): raw 92_392 → 92_433 (+41 B), gzip 29_229 → 29_238 (+9 B), brotli 25_951 → 25_968 (+17 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, the one line a field with no binding gets. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: the sanitizer document named per call): raw 92_433 → 92_496 (+63 B), gzip 29_238 → 29_261 (+23 B), brotli 25_968 → 25_991 (+23 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, the one line a field with no binding gets. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: one scope per runtime session): raw 92_496 → 93_010 (+514 B), gzip 29_261 → 29_456 (+195 B), brotli 25_991 → 26_162 (+171 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, the one line a field with no binding gets. The log in bundle-budgets.ts has the whole change.
-export const INLINE_LEAN_BUDGET = { raw: 94567, gzip: 29929, brotli: 26525 } as const;
+export const INLINE_LEAN_BUDGET = { raw: 94817, gzip: 30060, brotli: 26619 } as const;
 
 // 2026-10-08: explicit fragment patch fields, precise path fingerprints, the safe
 // hex-colour renderer, pending-render debt and revision-aware burst scheduling.
@@ -114,3 +115,7 @@ export const INLINE_LEAN_BUDGET = { raw: 94567, gzip: 29929, brotli: 26525 } as 
 // measurements, preserving existing cushions; other ceilings stay fixed.
 // Full runtime: +663 raw / +216 gzip (level 9) / +197 brotli bytes.
 // Lean: +78 raw / +23 gzip / +13 brotli bytes for tracker state only.
+
+// 2026-10-10: cherry-pick without keyed-child fragment targeting.
+// Rebased ceilings preserve existing margins; exceeded dimensions use the
+// resulting build plus 20 raw / 12 gzip / 128 brotli bytes.

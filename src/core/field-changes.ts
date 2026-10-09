@@ -29,6 +29,11 @@ export class FieldChangeTracker {
   private previousPaths: Map<string, string | undefined> | null = null;
   private lexicalOrders: Map<string, readonly (string | undefined)[]> | null = null;
 
+  /** Whether the current diff includes precise paths rather than only top-level fields. */
+  get trackingPaths(): boolean {
+    return this.previousPaths !== null;
+  }
+
   /** Diff `fields` against the previous message and remember them for the next call. */
   diff(
     fields: Readonly<Record<string, unknown>>,

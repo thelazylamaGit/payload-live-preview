@@ -189,9 +189,14 @@ export class LivePreviewRuntime {
       hydration: options.hydration,
     };
     this.writer = new BindingWriter(this.deps, this.state);
-    this.pipeline = new UpdatePipeline(this.deps, this.state, () => {
-      this.rebuildCache();
-    });
+    this.pipeline = new UpdatePipeline(
+      this.deps,
+      this.state,
+      () => {
+        this.rebuildCache();
+      },
+      this.writer,
+    );
   }
 
   /**

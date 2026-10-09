@@ -453,11 +453,26 @@ hook islands coexist on one page.
 
 ## Revision discipline
 
-One revision per admin message. A newer message aborts the previous
-revision's fragment requests; a response that arrives late is discarded;
-identical boundaries in one revision share a request; at most four
-requests run at once (`maxConcurrent` on `createFragmentStrategy()`). Slow
-fragment A can never overwrite fast fragment B.
+One revision per admin message, with at most one render in flight per boundary.
+Newer edits coalesce into the latest pending state without repeatedly aborting
+requests. At most four requests run at once (`maxConcurrent` on
+`createFragmentStrategy()`), and independent boundaries can finish independently.
+
+An edit covered by the existing explicit `patchFields` permissions and matching
+bindings can reuse the pending render. Before morphing, the runtime checks the
+returned permissions and bindings, then uses the existing binding writers to
+apply the latest values to the returned markup. The DOM therefore receives the
+current values together with the rendered structure, without flashing older text.
+A newer structural or server-owned edit invalidates the response; when it settles,
+the runtime discards it and renders the latest pending state. Parent rendering
+continues to suppress descendant requests and direct writes.
+
+Newly created text leaves without mounted bindings cannot prove compatibility,
+even when their paths are permitted. Their edits keep the server path until a
+current render installs matching bindings. Sustained server-owned changes can
+therefore postpone a visible update, but request churn stays bounded by response
+completion rather than the number of keystrokes. Failed renders retain owed work
+and use the existing fallback and retry behaviour; teardown aborts pending work.
 
 ## Direct bindings inside a fragment
 
@@ -561,10 +576,10 @@ all desired colour permissions as well as exact safe leaf paths. An empty array
 clears the list; omission preserves it. Failed, aborted and stale responses leave
 permissions unchanged. Permissions are never inferred from the returned bindings.
 
-If an affected boundary has any server work, it renders once and its inner
-bindings are left alone. Other boundaries can patch independently. A newer direct
-edit takes over pending server work with the latest fields; it cannot drop an
-unfinished image edit, and superseded responses cannot apply.
+If an affected boundary has server work, its inner bindings are left alone until
+a compatible response applies their latest values with the rendered structure.
+Other boundaries can patch independently. A newer direct edit cannot drop an
+unfinished image edit, and incompatible responses cannot apply.
 
 `cssProperty: 'background-color'` selects the built-in `hexColor` renderer. This is
 the only supported CSS property. It accepts `#rgb`, `#rgba`, `#rrggbb` and

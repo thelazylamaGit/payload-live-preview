@@ -100,6 +100,10 @@ export function fragmentStrategyFrom(handler: FragmentHandler): FragmentStrategy
           if (outcome.status === 'rendered') {
             if (outcome.patchFields === undefined) context.morph(element, outcome.html);
             else context.morph(element, outcome.html, outcome.patchFields);
+            if (!context.isCurrent()) {
+              report.superseded += 1;
+              return;
+            }
             context.rendered(element, boundary.id, boundary.key);
             report.rendered += 1;
             return;

@@ -60,11 +60,19 @@
     },
     "src/core/strategy-runner.ts::const controller = new AbortController();": {
       "release": "scope",
-      "why": "A fragment or route request in flight; RuntimeState.abortStrategies() aborts both, and the scope owns that call."
+      "why": "A route request in flight; RuntimeState.abortStrategies() aborts it, and the scope owns that call."
+    },
+    "src/core/fragment-work.ts::controller: new AbortController(),": {
+      "release": "scope",
+      "why": "One fragment request per boundary; RuntimeState.abortStrategies() aborts all boundary controllers on teardown, and the scope owns that call. Route takeover also aborts them."
     },
     "src/core/strategy-runner.ts::state.routeRetry = setTimeout(() => {": {
       "release": "scope",
       "why": "The trailing route run a refusal asked for; RuntimeState.abortStrategies() clears it, and the scope owns that call."
+    },
+    "src/core/strategy-runner.ts::state.fragmentRetry = setTimeout(() => {": {
+      "release": "scope",
+      "why": "The existing trailing fragment retry; RuntimeState.abortStrategies() clears it on a newer message or teardown, and the scope owns that call."
     },
     "src/core/runtime.ts::Object.defineProperty(window, '__livePreview', {": {
       "release": "caller",

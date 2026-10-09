@@ -29,6 +29,111 @@ function markup(patchFields = false, owner = 'home'): string {
 }
 
 describe('strategy recovery without another edit', () => {
+  it('preserves scoped work and its permitted values while another document updates', async () => {
+    document.body.innerHTML = ['home', 'other']
+      .map(
+        (owner) =>
+          `<section data-payload-owner="global:${owner}" data-payload-fragment="${owner}" data-payload-depends="title,layout" data-payload-patch-fields="title"><h1 data-payload-field="title">${owner}</h1></section>`,
+      )
+      .join('');
+    const pending = deferred<FragmentOutcome>();
+    const requests: StrategyRequest[] = [];
+    const render = (request: StrategyRequest): FragmentOutcome => ({
+      status: 'rendered',
+      html: `<h1 data-payload-field="title" class="${String(request.fields['layout'])}">${String(request.fields['title'])}</h1>`,
+    });
+    runtime = makeRuntime({
+      scopeBindingsByOwner: true,
+      strategies: {
+        fragment: fragmentStrategyFrom((request) => {
+          requests.push(request);
+          return requests.length === 2 ? pending.promise : Promise.resolve(render(request));
+        }),
+      },
+    });
+    runtime.start();
+    const send = (slug: string, title: string, layout: string) =>
+      fireMessage({
+        type: 'payload-live-preview',
+        globalSlug: slug,
+        data: { title, layout },
+      });
+    send('home', 'Home baseline', 'normal');
+    await vi.advanceTimersByTimeAsync(30);
+    send('home', 'Home baseline', 'wide');
+    await vi.advanceTimersByTimeAsync(30);
+    send('home', 'Latest home', 'wide');
+    await vi.advanceTimersByTimeAsync(30);
+    send('other', 'Latest other', 'normal');
+    await vi.advanceTimersByTimeAsync(30);
+    pending.resolve(render(requests[1]!));
+    await vi.advanceTimersByTimeAsync(30);
+    expect(document.querySelector('[data-payload-owner="global:home"] h1')!.textContent).toBe(
+      'Latest home',
+    );
+    expect(document.querySelector('[data-payload-owner="global:home"] h1')!.className).toBe('wide');
+    expect(document.querySelector('[data-payload-owner="global:other"] h1')!.textContent).toBe(
+      'Latest other',
+    );
+    expect(requests.filter((request) => request.globalSlug === 'home')).toHaveLength(2);
+  });
+
+  it('coalesces removal to an empty Lexical tree and recreation without using nonexistent bindings', async () => {
+    const path = 'content.root.children.0.text';
+    const fields = {
+      content: { root: { type: 'root', children: [{ type: 'text', text: 'Old' }] } },
+    };
+    document.body.innerHTML = `<section data-payload-fragment="rich" data-payload-depends="content" data-payload-patch-fields="${path}"><span data-payload-field="${path}">Old</span></section>`;
+    const requests: StrategyRequest[] = [];
+    const pending = deferred<FragmentOutcome>();
+    runtime = makeRuntime({
+      strategies: {
+        fragment: fragmentStrategyFrom((request) => {
+          requests.push(request);
+          if (requests.length === 3) return pending.promise;
+          const incoming = request.fields as typeof fields;
+          return Promise.resolve({
+            status: 'rendered',
+            html: incoming.content.root.children
+              .map((node) => `<span data-payload-field="${path}">${node.text}</span>`)
+              .join(''),
+          });
+        }),
+      },
+    });
+    const send = () =>
+      fireMessage({
+        type: 'payload-live-preview',
+        globalSlug: 'home',
+        data: structuredClone(fields),
+      });
+    runtime.start();
+    send();
+    await vi.advanceTimersByTimeAsync(30);
+    fields.content.root.children = [];
+    send();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(document.querySelector('span')).toBeNull();
+    fields.content.root.children.push({ type: 'text', text: 'New' });
+    send();
+    await vi.advanceTimersByTimeAsync(30);
+    for (let index = 0; index < 20; index += 1) {
+      fields.content.root.children[0]!.text = `New ${index}`;
+      send();
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    expect(requests).toHaveLength(3);
+    pending.resolve({ status: 'rendered', html: `<span data-payload-field="${path}">New</span>` });
+    await vi.advanceTimersByTimeAsync(30);
+    expect(requests).toHaveLength(4);
+    expect(document.querySelector('span')!.textContent).toBe('New 19');
+    fields.content.root.children[0]!.text = 'Direct again';
+    send();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(requests).toHaveLength(4);
+    expect(document.querySelector('span')!.textContent).toBe('Direct again');
+  });
+
   it.each([false, true])(
     'carries unfinished boundaries through repeated identical snapshots (patch fields: %s)',
     async (patchFields) => {
@@ -51,8 +156,8 @@ describe('strategy recovery without another edit', () => {
         post('outline');
         await vi.advanceTimersByTimeAsync(1);
       }
-      expect(requests).toHaveLength(4);
-      expect(requests.slice(0, -1).every((request) => request.signal.aborted)).toBe(true);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]!.signal.aborted).toBe(false);
       expect(runtime.inspect().revisions.completed).toBe(0);
       responses
         .at(-1)!

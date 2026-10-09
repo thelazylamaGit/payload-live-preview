@@ -50,7 +50,7 @@
       "capabilities": ["script-load"],
       "why": "The static-delivery bootstrap: one `<script>` whose `src` and `integrity` are build-time constants the generator prepends. Nothing from the page or the wire reaches the URL."
     },
-    "src/core/strategy-runner.ts": {
+    "src/core/fragment-work.ts": {
       "capabilities": ["html-sink"],
       "why": "Morphs a fragment the page's own server rendered into its boundary, parsed into a `<template>` first. Sanitising it would strip the page's own legitimate markup; the sink inventory records it as `trusted-origin`."
     },

@@ -19,7 +19,7 @@
   "totals": {
     "files": 337,
     "suites": 723,
-    "tests": 3067,
+    "tests": 3076,
     "benchmarks": 12
   },
   "groups": {
@@ -62,7 +62,7 @@
     "unit": {
       "files": 278,
       "suites": 647,
-      "tests": 2834,
+      "tests": 2843,
       "benchmarks": 0
     }
   },
@@ -953,7 +953,7 @@
       "path": "tests/unit/core/fragment-lexical-leaves.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 9,
+      "tests": 16,
       "benchmarks": 0
     },
     {
@@ -1415,7 +1415,7 @@
       "path": "tests/unit/core/strategy-recovery.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 10,
+      "tests": 12,
       "benchmarks": 0
     },
     {

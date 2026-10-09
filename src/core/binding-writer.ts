@@ -39,7 +39,7 @@ export class BindingWriter {
 
   /** Scheduler callback. `false` means nothing reached the DOM. */
   apply(update: ScheduledUpdate): boolean {
-    const { deps, state } = this;
+    const { state } = this;
     const transaction = state.activeUpdate;
     if (
       transaction === null ||
@@ -49,6 +49,25 @@ export class BindingWriter {
     ) {
       return false;
     }
+    return this.write(update, transaction, () => state.isCurrent(transaction), true);
+  }
+
+  /** Rebase permitted values on detached fragment markup before it can reach the DOM. */
+  applyFragment(
+    update: ScheduledUpdate,
+    transaction: UpdateTransaction,
+    isCurrent: () => boolean,
+  ): boolean {
+    return isCurrent() && this.write(update, transaction, isCurrent, false);
+  }
+
+  private write(
+    update: ScheduledUpdate,
+    transaction: UpdateTransaction,
+    isCurrent: () => boolean,
+    notify: boolean,
+  ): boolean {
+    const { deps, state } = this;
     const { target, value } = update;
     const schemaEntry =
       transaction.schemaIndex !== undefined
@@ -63,18 +82,19 @@ export class BindingWriter {
     try {
       renderer = deps.resolveRenderer(type, target);
     } catch (error) {
-      return this.fail(transaction, error);
+      return this.fail(transaction, error, isCurrent);
     }
-    if (!state.isCurrent(transaction)) return false;
-    const emitElementUpdate = deps.emitter.listenerCount('elementUpdate') > 0;
+    if (!isCurrent()) return false;
+    const emitElementUpdate = notify && deps.emitter.listenerCount('elementUpdate') > 0;
     // Custom-element accessors run application code, so this is a boundary too.
     const previous = emitElementUpdate ? readElementSnapshot(target.element) : undefined;
-    if (!state.isCurrent(transaction)) return false;
+    if (!isCurrent()) return false;
     const context: RenderContext = {
       allFields: update.allFields,
       locale: target.locale ?? transaction.locale,
       schema: schemaEntry,
       ...this.instanceContext,
+      ...(notify ? {} : { reportUnfaithful: () => undefined }),
     };
     // A boundary anchor stays out of layout and the accessibility tree while empty.
     if (target.hidesWhenEmpty === true) {
@@ -92,25 +112,27 @@ export class BindingWriter {
         // Read before the write, because afterwards the template's own reading
         // of this value is gone (Z20). Costs nothing unless this is the first
         // write to a binding a formatting renderer owns.
-        const shown = watchServerFormatting(deps, state, target, type);
+        const shown = notify ? watchServerFormatting(deps, state, target, type) : undefined;
         const outcome = invokeRenderer(renderer, target, value, context);
         if (outcome === false && rendererUsesNoWriteOutcome(renderer)) {
           // The renderer refused the value it was given, so the element still
           // shows what the server put there — right until the next edit makes
           // it stale. That is the moment to ask for better markup.
-          reportUnfaithfulPatch(deps, state, target, `is a value ${renderer.name} cannot render`);
+          if (notify) {
+            reportUnfaithfulPatch(deps, state, target, `is a value ${renderer.name} cannot render`);
+          }
           return false;
         }
         if (shown !== undefined) reportServerFormatting(deps, target, shown);
       } else {
         deps.log('no renderer for', type);
-        reportUnfaithfulPatch(deps, state, target, `has no renderer for "${type}"`);
+        if (notify) reportUnfaithfulPatch(deps, state, target, `has no renderer for "${type}"`);
         return false;
       }
     } catch (error) {
-      return this.fail(transaction, error);
+      return this.fail(transaction, error, isCurrent);
     }
-    if (!state.isCurrent(transaction)) return false;
+    if (!isCurrent()) return false;
     if (emitElementUpdate) {
       void deps.emitter.emitWhile(
         'elementUpdate',
@@ -123,12 +145,12 @@ export class BindingWriter {
           receivedAt: transaction.receivedAt,
           source: 'patch',
         },
-        () => state.isCurrent(transaction),
+        isCurrent,
       );
     }
     // The first handler runs before emitWhile yields; a reentrant newer
     // revision must not count this write as applied.
-    const applied = state.isCurrent(transaction);
+    const applied = isCurrent();
     if (applied) {
       if (update.valueIdentity !== undefined) {
         state.lastAppliedIdentity.set(target.element, update.valueIdentity);
@@ -139,11 +161,17 @@ export class BindingWriter {
     return applied;
   }
 
-  private fail(transaction: UpdateTransaction, cause: unknown): false {
-    if (!this.state.isCurrent(transaction)) return false;
+  private fail(
+    transaction: UpdateTransaction,
+    cause: unknown,
+    isCurrent = () => this.state.isCurrent(transaction),
+  ): false {
+    if (!isCurrent()) return false;
     const error = cause instanceof Error ? cause : new Error(String(cause));
-    void this.deps.emitter.emitWhile('error', { error, context: 'renderer', code: 'LP0603' }, () =>
-      this.state.isCurrent(transaction),
+    void this.deps.emitter.emitWhile(
+      'error',
+      { error, context: 'renderer', code: 'LP0603' },
+      isCurrent,
     );
     return false;
   }

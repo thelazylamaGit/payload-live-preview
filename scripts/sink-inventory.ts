@@ -60,7 +60,7 @@ export const HTML_SINKS: ReadonlyMap<string, HtmlSinkJustification> = new Map([
   ['src/security/sanitizer.ts::trustedHtml(html)', 'inert-parse'],
   // A fragment the project's server rendered, parsed here and morphed into the
   // boundary. Sanitising it would strip the page's own legitimate markup.
-  ['src/core/strategy-runner.ts::trustedHtml(html)', 'trusted-origin'],
+  ['src/core/fragment-work.ts::trustedHtml(html)', 'trusted-origin'],
 ]);
 
 /**
