@@ -118,6 +118,7 @@ function pathIdentities(
   orders: Map<string, readonly (string | undefined)[]>,
 ): Map<string, string | undefined> {
   const result = new Map<string, string | undefined>();
+  const lexicalIdentities = new WeakMap<object, string | undefined>();
   const seen = new WeakSet();
   const visit = (value: unknown, path: string, lexical = false): string | undefined => {
     if (value === null || typeof value !== 'object') {
@@ -138,6 +139,8 @@ function pathIdentities(
       !Array.isArray(value) &&
       typeof record['type'] === 'string' &&
       (lexical || (path.endsWith('.root') && record['type'] === 'root'));
+    // Lexical exports can change object insertion order; children positions stay ordered.
+    if (node) entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     const children =
       lexical &&
       Array.isArray(value) &&
@@ -149,21 +152,40 @@ function pathIdentities(
           typeof (item as Record<string, unknown>)['type'] === 'string',
       );
     const content: unknown[][] = [];
+    const fullContent: unknown[][] = [];
     for (const [key, child] of entries) {
       const childLexical = children || (node && key === 'children');
       const identity = visit(child, path + '.' + key, childLexical);
       if (lexical || node) {
+        const fullIdentity =
+          childLexical && child !== null && typeof child === 'object'
+            ? lexicalIdentities.get(child as object)
+            : valueIdentity(child);
+        fullContent.push([key, fullIdentity]);
         content.push([
           key,
           node && record['type'] === 'text' && key === 'text' && typeof child === 'string'
             ? 'text-value'
             : childLexical
               ? identity
-              : valueIdentity(child),
+              : fullIdentity,
         ]);
       }
     }
-    if (children) orders.set(path, value.map(valueIdentity));
+    if (children) {
+      orders.set(
+        path,
+        value.map((item) => lexicalIdentities.get(item as object)),
+      );
+    }
+    if (lexical || node) {
+      lexicalIdentities.set(
+        value,
+        fullContent.some(([, identity]) => identity === undefined)
+          ? undefined
+          : valueIdentity(fullContent),
+      );
+    }
     const shape = Array.isArray(value)
       ? ['array', children ? [value.length, content] : arrayIdentity(value)]
       : ['object', entries.map(([key]) => key).sort()];

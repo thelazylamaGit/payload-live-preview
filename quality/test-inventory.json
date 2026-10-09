@@ -19,7 +19,7 @@
   "totals": {
     "files": 337,
     "suites": 723,
-    "tests": 3064,
+    "tests": 3067,
     "benchmarks": 12
   },
   "groups": {
@@ -62,7 +62,7 @@
     "unit": {
       "files": 278,
       "suites": 647,
-      "tests": 2831,
+      "tests": 2834,
       "benchmarks": 0
     }
   },
@@ -918,7 +918,7 @@
       "path": "tests/unit/core/field-changes.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 7,
+      "tests": 10,
       "benchmarks": 0
     },
     {
