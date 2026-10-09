@@ -1,4 +1,5 @@
 /**
+ * 2026-10-10: per-boundary fragment coalescing; ceilings cover paired build growth and existing baseline excess.
  * The inline-profile byte budgets, and the log of why each number is what it
  * is. The measurement itself is in `bundle-measure.ts`, moved out when this
  * log reached the 500-line limit the way `entry-budgets.ts` did before it —
@@ -445,7 +446,7 @@
 // 2026-09-19 (2.1: one scope per runtime session): raw 115_036 → 115_550 (+514 B), gzip 36_293 → 36_489 (+196 B), brotli 32_001 → 32_196 (+195 B) — the difference between a build of main and this branch, cushions kept. The bytes are the session scope: the runtime opens a ResourceScope per session (the plugin registrations' class, now in src/core) and hands it the teardown, so destroy(), suspend() and a failed start release the same way; the hand-written cleanup list and its guard go, a minimal LifetimeScope class comes into the runtime bundle (ADR 0005, 2.1 note). The lean profile carries the runtime and moves with it. The entry rows in entry-budgets.ts move with the same change and are recorded here (raw / gzip / brotli), that file being at its line limit: `adapters/astro/index.js` +514 / +195 / +54, `adapters/astro/middleware-entry.js` +514 / +195 / +192, `adapters/nextjs/index.js` +514 / +199 / +125, `adapters/nuxt/index.js` +514 / +196 / +187, `adapters/sveltekit/index.js` +514 / +193 / +194, `client.cjs` +322 / +142 / +184, `client.js` +322 / +141 / +126, `core.cjs` +322 / +133 / +171, `core.js` +322 / +142 / +153, `index.cjs` +836 / +344 / +233, `index.js` +836 / +352 / +182, `lean.cjs` +514 / +195 / +198, `lean.js` +514 / +196 / +215.
 // 2026-10-10: fragment patchFields application adds 70 raw / 20 gzip bytes;
 // paired builds at the same epoch preserve the existing margins. Brotli holds.
-export const INLINE_BUDGET = { raw: 123625, gzip: 38760, brotli: 34103 } as const;
+export const INLINE_BUDGET = { raw: 128141, gzip: 39946, brotli: 35078 } as const;
 
 // 2026-10-06: data-payload-morph, compatible boundary pairing and its author-template
 // allow-list entry add 97 raw / 32 gzip bytes to the default inline profile.

@@ -27,7 +27,7 @@ import { FieldRevealer } from './reveal';
 import { RevealLedger } from './reveal-ledger';
 import type { RuntimeOptions } from './runtime-options';
 import type { ConnectionState, HeartbeatTimer } from './state';
-import type { StrategyHandlers } from './strategies';
+import type { FragmentStrategy, StrategyHandlers } from './strategies';
 import type { CachedElement, FieldRenderer, RichTextRenderer } from './types';
 import type { FlushStats, UpdateScheduler } from './update-scheduler';
 
@@ -43,6 +43,8 @@ export interface UpdateTransaction {
   readonly forceRender: boolean;
   /** Top-level fields whose value changed since the previous message, plus their dependents. */
   touched: ReadonlySet<string>;
+  /** Actual tracker changes, including population refinements that do not schedule ordinary writes. */
+  changedFields?: ReadonlySet<string>;
   changedPaths?: ReadonlySet<string>;
   structuralPaths?: ReadonlySet<string>;
   /** The connection's first message, where every field counts as changed. */
@@ -73,8 +75,20 @@ export interface UpdateTransaction {
   fragmentFailures?: Map<Element, number>;
   /** Saved route markup needs a full fragment replay, independent of the edit diff. */
   replayFragments?: boolean;
-  /** A refinement arrived while this revision's fragment batch was running. */
-  fragmentReapply?: boolean;
+}
+
+/** Server work belongs to a boundary, independently of incoming document revisions. */
+export interface FragmentWork {
+  readonly boundary: Element;
+  readonly strategy: FragmentStrategy;
+  readonly controller: AbortController;
+  readonly signature: string;
+  readonly paths: Set<string>;
+  transaction: UpdateTransaction;
+  data: PayloadLivePreviewData;
+  valid: boolean;
+  pending: boolean;
+  promise?: Promise<void>;
 }
 
 export interface RuntimeDeps {
@@ -171,7 +185,7 @@ export class RuntimeState {
   readonly fragmentStats = { rendered: 0, failed: 0, superseded: 0 };
   readonly routeStats = { refreshes: 0, failed: 0, refused: 0, loopStopped: 0 };
   readonly fragmentRenderOwed = new Set<Element>();
-  fragmentController: AbortController | null = null;
+  readonly fragmentWork = new Map<Element, FragmentWork>();
   fragmentRetry: ReturnType<typeof setTimeout> | null = null;
   routeController: AbortController | null = null;
   /** The trailing run a refused refresh asked for; at most one, and always the newest. */
@@ -214,13 +228,14 @@ export class RuntimeState {
   }
 
   /**
-   * Abort in-flight strategy work; a newer revision or a stop supersedes it.
+   * Abort route work and retries; ordinary revisions preserve fragment work.
+   * A stop aborts every boundary's in-flight request as well.
    * The trailing route refresh goes with it: the revision that asked for it is
    * no longer the one on screen, and the newer one runs it instead — its
    * message carries the older one's values too, so `routeRefreshOwed` makes
    * it plan the refresh its own diff would not.
    */
-  abortStrategies(): void {
+  abortStrategies(preserveFragments = false): void {
     if (this.fragmentRetry !== null) {
       clearTimeout(this.fragmentRetry);
       this.fragmentRetry = null;
@@ -231,11 +246,13 @@ export class RuntimeState {
       this.routeRetry = null;
       this.routeRefreshOwed = true;
     }
-    for (const key of ['fragmentController', 'routeController'] as const) {
-      const controller = this[key];
-      if (controller === null) continue;
-      this[key] = null;
-      controller.abort();
+    if (!preserveFragments) {
+      const work = [...this.fragmentWork.values()];
+      this.fragmentWork.clear();
+      for (const entry of work) entry.controller.abort();
     }
+    const controller = this.routeController;
+    this.routeController = null;
+    controller?.abort();
   }
 }

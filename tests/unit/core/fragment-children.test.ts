@@ -79,6 +79,76 @@ async function start() {
   return fetchFragment;
 }
 describe('targeted keyed child fragments', () => {
+  it('keeps descendant debt suppressed after a parent takes ownership of newer edits', async () => {
+    const fetchFragment = await start();
+    const child = deferred<Response>();
+    const parent = deferred<Response>();
+    fetchFragment
+      .mockImplementationOnce(() => child.promise)
+      .mockImplementationOnce(() => parent.promise);
+    const items = blocks();
+    items[0]!.title = 'First';
+    post(items);
+    await tick();
+    const childBody = body(fetchFragment.mock.calls[0]!);
+    items.reverse();
+    post(items);
+    await tick();
+    const parentBody = body(fetchFragment.mock.calls[1]!);
+    items[2]!.title = 'Latest under parent';
+    post(items);
+    await tick();
+    child.resolve(response(childBody));
+    await tick();
+    expect(fetchFragment).toHaveBeenCalledTimes(2);
+    expect(node('a').querySelector('h2')!.textContent).toBe('One');
+    parent.resolve(response(parentBody));
+    await tick();
+    expect(fetchFragment.mock.calls.map((call) => body(call).fragment)).toEqual([
+      'block',
+      'list',
+      'list',
+    ]);
+    expect(node('a').querySelector('h2')!.textContent).toBe('Latest under parent');
+    expect(
+      [...document.querySelectorAll('article')].map((element) =>
+        element.getAttribute('data-payload-fragment-key'),
+      ),
+    ).toEqual(['c', 'b', 'a']);
+  });
+
+  it('lets a sibling finish while another boundary coalesces incompatible edits', async () => {
+    const fetchFragment = await start();
+    const first = deferred<Response>();
+    const sibling = deferred<Response>();
+    fetchFragment
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => sibling.promise);
+    const items = blocks();
+    items[0]!.title = 'Pending A';
+    post(items);
+    await tick();
+    const old = body(fetchFragment.mock.calls[0]!);
+    for (let index = 0; index < 20; index += 1) {
+      items[0]!.title = `A ${index}`;
+      post(items);
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    items[1]!.title = 'Independent B';
+    post(items);
+    await tick();
+    expect(fetchFragment.mock.calls.map((call) => body(call).key)).toEqual(['a', 'b']);
+    sibling.resolve(response(body(fetchFragment.mock.calls[1]!)));
+    await tick();
+    expect(node('b').querySelector('h2')!.textContent).toBe('Independent B');
+    expect(node('a').querySelector('h2')!.textContent).toBe('One');
+    first.resolve(response(old));
+    await tick();
+    expect(fetchFragment.mock.calls.map((call) => body(call).key)).toEqual(['a', 'b', 'a']);
+    expect(node('a').querySelector('h2')!.textContent).toBe('A 19');
+    expect(node('b').querySelector('h2')!.textContent).toBe('Independent B');
+  });
+
   it('requests only one affected child without rescanning the DOM during planning', async () => {
     const fetchFragment = await start();
     const pending = deferred<Response>();
@@ -205,10 +275,7 @@ describe('targeted keyed child fragments', () => {
   it('carries pending child work through a direct edit in another sibling', async () => {
     const fetchFragment = await start();
     const first = deferred<Response>();
-    const second = deferred<Response>();
-    fetchFragment
-      .mockImplementationOnce(() => first.promise)
-      .mockImplementationOnce(() => second.promise);
+    fetchFragment.mockImplementationOnce(() => first.promise);
     const items = blocks();
     items[0]!.title = 'Pending';
     post(items);
@@ -217,10 +284,8 @@ describe('targeted keyed child fragments', () => {
     items[1]!.colour = '#f00';
     post(items);
     await tick();
-    expect(fetchFragment.mock.calls.map((call) => body(call).key)).toEqual(['a', 'a']);
+    expect(fetchFragment.mock.calls.map((call) => body(call).key)).toEqual(['a']);
     expect(node('b').querySelector('div')?.style.backgroundColor).toBe('rgb(255, 0, 0)');
-    second.resolve(response(body(fetchFragment.mock.calls[1]!)));
-    await tick();
     first.resolve(response(old));
     await tick();
     expect(node('a').querySelector('h2')?.textContent).toBe('Pending');
@@ -264,8 +329,13 @@ describe('targeted keyed child fragments', () => {
       items[0]!.colour = '#f00';
       post(items);
       await tick();
+      if (sequence === 'parent then child') {
+        expect(fetchFragment).toHaveBeenCalledTimes(1);
+        first.resolve(response(old));
+        await tick();
+      }
       expect(fetchFragment).toHaveBeenCalledTimes(2);
-      expect(fetchFragment.mock.calls[0]![1]!.signal?.aborted).toBe(true);
+      expect(fetchFragment.mock.calls[0]![1]!.signal?.aborted).toBe(false);
       const latest = body(fetchFragment.mock.calls[1]!);
       expect(latest.fragment).toBe('list');
       expect(node('c').querySelector('div')?.style.backgroundColor).toBe('rgb(119, 136, 153)');

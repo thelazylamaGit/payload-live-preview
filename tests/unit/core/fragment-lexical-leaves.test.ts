@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildBuiltinRenderers } from '@field-types/index';
 import { createFragmentStrategy } from '@fragment/index';
+import { EventEmitter } from '@events/emitter';
 import type { FragmentRequestBody } from '@/types/fragment-protocol';
 import type { LivePreviewRuntime } from '@core/lifecycle';
 import { deferred, fireMessage, makeRuntime } from './lifecycle-startup-harness';
@@ -44,7 +45,7 @@ function html(fields: Data): string {
     leaves(fields)
       .map(
         (node, index) =>
-          `<span data-payload-field="${path(index)}" data-payload-type="text">${node.text}</span>`,
+          `<span data-server-format="${node.format}" data-payload-field="${path(index)}" data-payload-type="text">${node.text}</span>`,
       )
       .join('') +
     `<div data-payload-field="blocks.0.colour" data-payload-type="hexColor" data-payload-css-property="background-color" style="background-color:${fields.blocks[0]!.colour}"></div>`
@@ -73,7 +74,11 @@ const tick = async () => {
 function post(fields: Data): void {
   fireMessage({ type: 'payload-live-preview', globalSlug: 'home', data: fields });
 }
-async function start(optIn = true, initial = data()) {
+async function start(
+  optIn = true,
+  initial = data(),
+  overrides: Partial<ConstructorParameters<typeof LivePreviewRuntime>[0]> = {},
+) {
   document.body.innerHTML = `<section data-payload-fragment="rich" data-payload-depends="blocks" ${optIn ? `data-payload-patch-fields="${permissions}"` : ''}>${html(initial)}</section>`;
   const fetchFragment = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
     (_url, init) =>
@@ -91,6 +96,7 @@ async function start(optIn = true, initial = data()) {
     scopeBindingsByOwner: false,
     bindingDebounceMs: 0,
     dataMerge: { serverURL: 'https://cms.example.com', fetchFn: population },
+    ...overrides,
     strategies: {
       fragment: createFragmentStrategy({ endpoint: '/payload/fragment', fetch: fetchFragment }),
     },
@@ -105,6 +111,229 @@ async function start(optIn = true, initial = data()) {
 }
 
 describe('direct Lexical text leaves inside an existing fragment', () => {
+  it('makes progress during 150 ms rendering and sustained typing with one request and no stale text', async () => {
+    const emitter = new EventEmitter();
+    const { fetchFragment, population } = await start(true, data(), { emitter });
+    const fields = data();
+    const rendered: string[] = [];
+    emitter.on('fragmentRender', () => {
+      const shown = document.querySelector('span')!.textContent;
+      expect(shown).toBe(leaves(fields)[0]!.text);
+      rendered.push(shown);
+    });
+    emitter.on('cacheRefresh', () => {
+      expect(document.querySelector('span')!.textContent).toBe(leaves(fields)[0]!.text);
+    });
+    fetchFragment.mockImplementation((_url, init) => {
+      const body = JSON.parse(init!.body as string) as FragmentRequestBody;
+      return new Promise((resolve) => setTimeout(() => resolve(response(body)), 150));
+    });
+    leaves(fields)[0]!.format = 1;
+    post(fields);
+    await vi.advanceTimersByTimeAsync(10);
+    let updates = 0;
+    let previous = 'One';
+    for (let index = 1; index <= 60; index += 1) {
+      leaves(fields)[0]!.text = `Typing ${index}`;
+      post(fields);
+      await vi.advanceTimersByTimeAsync(10);
+      const shown = document.querySelector('span')!.textContent;
+      if (shown !== previous) updates += 1;
+      previous = shown;
+      if (index === 20) {
+        expect(rendered).toHaveLength(1);
+        expect(shown).not.toBe('One');
+      }
+    }
+    await tick();
+    expect(document.querySelector('span')!.textContent).toBe('Typing 60');
+    expect(document.querySelector('span')!.getAttribute('data-server-format')).toBe('1');
+    expect(updates).toBeGreaterThan(10);
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
+    expect(fetchFragment.mock.calls[0]![1]!.signal!.aborted).toBe(false);
+    expect(population).toHaveBeenCalledTimes(1); // Only the structural edit needs population.
+  });
+
+  it('keeps an empty existing leaf direct through deletion and typing again', async () => {
+    const initial = data();
+    leaves(initial)[0]!.text = 'x'.repeat(40);
+    const { fetchFragment } = await start(true, initial);
+    fetchFragment.mockImplementation((_url, init) => {
+      const body = JSON.parse(init!.body as string) as FragmentRequestBody;
+      return new Promise((resolve) => setTimeout(() => resolve(response(body)), 150));
+    });
+    leaves(initial)[0]!.format = 1;
+    post(initial);
+    await vi.advanceTimersByTimeAsync(10);
+    for (let length = 39; length >= 0; length -= 1) {
+      leaves(initial)[0]!.text = 'x'.repeat(length);
+      post(initial);
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    await tick();
+    expect(document.querySelector('span')!.textContent).toBe('');
+    for (let length = 1; length <= 20; length += 1) {
+      leaves(initial)[0]!.text = 'y'.repeat(length);
+      post(initial);
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    await tick();
+    expect(document.querySelector('span')!.textContent).toBe('y'.repeat(20));
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces incompatible structure and server-owned metadata without morphing older structure', async () => {
+    const { fetchFragment } = await start();
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    fetchFragment
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const fields = data();
+    leaves(fields)[0]!.format = 1;
+    post(fields);
+    await tick();
+    const old = JSON.parse(fetchFragment.mock.calls[0]![1]!.body as string) as FragmentRequestBody;
+    for (let format = 2; format <= 10; format += 1) {
+      leaves(fields)[0]!.format = format;
+      leaves(fields)[0]!.text = `Latest ${format}`;
+      post(fields);
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    leaves(fields).pop();
+    post(fields);
+    await tick();
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
+    first.resolve(response(old, []));
+    await tick();
+    expect(fetchFragment).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('span')!.getAttribute('data-server-format')).toBe('0');
+    expect(document.querySelectorAll('span')).toHaveLength(2);
+    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
+      permissions,
+    );
+    const latest = JSON.parse(
+      fetchFragment.mock.calls[1]![1]!.body as string,
+    ) as FragmentRequestBody;
+    second.resolve(response(latest));
+    await tick();
+    expect(document.querySelector('span')!.textContent).toBe('Latest 10');
+    expect(document.querySelector('span')!.getAttribute('data-server-format')).toBe('10');
+    expect(document.querySelectorAll('span')).toHaveLength(1);
+  });
+
+  it('keeps edits to newly created, unbound leaves on the coalesced server path', async () => {
+    const { fetchFragment } = await start();
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    fetchFragment
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const fields = data();
+    leaves(fields).push(text('New'));
+    post(fields);
+    await tick();
+    const old = JSON.parse(fetchFragment.mock.calls[0]![1]!.body as string) as FragmentRequestBody;
+    // Permission alone is insufficient until a matching binding is mounted.
+    document
+      .querySelector('section')!
+      .setAttribute('data-payload-patch-fields', permissions + ',' + path(2));
+    for (let index = 0; index < 20; index += 1) {
+      leaves(fields)[2]!.text = `New ${index}`;
+      post(fields);
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
+    first.resolve(response(old, [path(0), path(1), path(2), 'blocks.0.colour']));
+    await tick();
+    expect(document.querySelectorAll('span')).toHaveLength(2);
+    const latest = JSON.parse(
+      fetchFragment.mock.calls[1]![1]!.body as string,
+    ) as FragmentRequestBody;
+    second.resolve(response(latest, [path(0), path(1), path(2), 'blocks.0.colour']));
+    await tick();
+    expect(document.querySelectorAll('span')[2]!.textContent).toBe('New 19');
+    fetchFragment.mockClear();
+    leaves(fields)[2]!.text = 'Direct now';
+    post(fields);
+    await tick();
+    expect(fetchFragment).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('span')[2]!.textContent).toBe('Direct now');
+  });
+
+  it('rejects a compatible revision when the response removes its permission', async () => {
+    const { fetchFragment } = await start();
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    fetchFragment
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const fields = data();
+    leaves(fields)[0]!.format = 1;
+    post(fields);
+    await tick();
+    const old = JSON.parse(fetchFragment.mock.calls[0]![1]!.body as string) as FragmentRequestBody;
+    leaves(fields)[0]!.text = 'Latest';
+    post(fields);
+    await tick();
+    first.resolve(response(old, []));
+    await tick();
+    expect(document.querySelector('span')!.textContent).toBe('One');
+    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
+      permissions,
+    );
+    const latest = JSON.parse(
+      fetchFragment.mock.calls[1]![1]!.body as string,
+    ) as FragmentRequestBody;
+    second.resolve(response(latest, []));
+    await tick();
+    expect(document.querySelector('span')!.textContent).toBe('Latest');
+    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe('');
+  });
+
+  it('falls back with current values after a delayed failure and retries owed work', async () => {
+    const { fetchFragment } = await start();
+    const pending = deferred<Response>();
+    fetchFragment.mockImplementationOnce(() => pending.promise);
+    const fields = data();
+    leaves(fields)[0]!.format = 1;
+    post(fields);
+    await tick();
+    leaves(fields)[0]!.text = 'Latest fallback';
+    post(fields);
+    await tick();
+    pending.resolve(new Response('failed', { status: 500 }));
+    await tick();
+    expect(document.querySelector('span')!.textContent).toBe('Latest fallback');
+    expect(runtime!.inspect().fragments.failed).toBe(1);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(fetchFragment).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('span')!.getAttribute('data-server-format')).toBe('1');
+  });
+
+  it('aborts boundary work on teardown and rejects late responses', async () => {
+    const { fetchFragment } = await start();
+    const pending = deferred<Response>();
+    fetchFragment.mockImplementationOnce(() => pending.promise);
+    const fields = data();
+    leaves(fields)[0]!.format = 1;
+    post(fields);
+    await tick();
+    const body = JSON.parse(fetchFragment.mock.calls[0]![1]!.body as string) as FragmentRequestBody;
+    leaves(fields)[0]!.text = 'Never apply';
+    post(fields);
+    await tick();
+    runtime!.destroy();
+    expect(fetchFragment.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    pending.resolve(response(body, []));
+    await tick();
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('span')!.textContent).toBe('One');
+    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
+      permissions,
+    );
+  });
+
   it('replaces obsolete permissions after a structural render and patches a new leaf directly', async () => {
     const { fetchFragment, population } = await start();
     const fields = data();
@@ -288,13 +517,10 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     },
   );
 
-  it('carries pending formatting into the latest text revision and discards the late response', async () => {
+  it('finishes pending formatting and rebases the latest compatible text without restarting', async () => {
     const { fetchFragment } = await start();
     const first = deferred<Response>();
-    const second = deferred<Response>();
-    fetchFragment
-      .mockImplementationOnce(() => first.promise)
-      .mockImplementationOnce(() => second.promise);
+    fetchFragment.mockImplementationOnce(() => first.promise);
     const fields = data();
     leaves(fields)[0]!.format = 1;
     post(fields);
@@ -303,16 +529,10 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     leaves(fields)[0]!.text = 'Latest';
     post(fields);
     await tick();
-    expect(fetchFragment).toHaveBeenCalledTimes(2);
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
     expect(document.querySelector('span')?.textContent).toBe('One');
-    expect(fetchFragment.mock.calls[0]![1]!.signal?.aborted).toBe(true);
-    const latest = JSON.parse(
-      fetchFragment.mock.calls[1]![1]!.body as string,
-    ) as FragmentRequestBody;
-    expect(leaves(latest.fields as Data)[0]).toMatchObject({ text: 'Latest', format: 1 });
-    second.resolve(response(latest));
-    await tick();
-    first.resolve(response(old, []));
+    expect(fetchFragment.mock.calls[0]![1]!.signal?.aborted).toBe(false);
+    first.resolve(response(old));
     await tick();
     expect(document.querySelector('span')?.textContent).toBe('Latest');
     expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(

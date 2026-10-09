@@ -97,7 +97,7 @@ service); the docs say so.
 | Cross-site request forgery                             | `Sec-Fetch-Site` must be `same-origin`/`none`; `Origin` must match the page origin or an explicit allow-list; JSON content type required.                 | 403 cross-site / foreign origin; 415 non-JSON             |
 | Amplification / resource exhaustion                    | Body limit (64 KiB), field depth limit (12), render timeout (5 s), client concurrency cap (4) and dedupe; rate limiting is the deployment's (documented). | 413 / 400 / 500 on timeout; client concurrency test       |
 | Cross-tenant access (a token for document A renders B) | The authorized context's scope is checked against the request (locale today; collection/id when the strategy carries them).                               | `scopeAllows` in the endpoint                             |
-| Stale content shown as current                         | Revision-bound requests, abort on supersession, fallback patch on failure, visible `LP08xx` code.                                                         | `fragment-strategy.test.ts`, `client.test.ts`             |
+| Stale content shown as current                         | Revision-bound requests, discard incompatible responses, rebase explicit permitted bindings, fallback patch on failure, visible `LP08xx` code.            | `fragment-strategy.test.ts`, `client.test.ts`             |
 
 ### 5. What stays out
 

@@ -6,6 +6,7 @@
 import type { PayloadLivePreviewData, PayloadLivePreviewMessage } from '@/types/payload-protocol';
 import { buildSchemaIndex } from '@schema/index';
 import { adoptUniqueBindings, restoreUniqueBindings } from './auto-bind';
+import type { BindingWriter } from './binding-writer';
 import { isBindingInScope, messageOwnerKeys, readDocumentId } from './binding-owner';
 import type { MergeResult } from './data-merger';
 import { mergeDependencyMaps } from './dependencies';
@@ -36,6 +37,7 @@ export class UpdatePipeline {
     private readonly deps: RuntimeDeps,
     private readonly state: RuntimeState,
     rebuildCache: () => void,
+    writer: BindingWriter,
   ) {
     // The profile decides, and esbuild folds the branch: the lean build drops
     // the real runner and everything only it reached — the morph, the fragment
@@ -50,6 +52,8 @@ export class UpdatePipeline {
             transform: (target, value, allFields, isCurrent) =>
               transformForBinding(deps, target, value, allFields, isCurrent),
             rebuildCache,
+            writeFragment: (update, transaction, isCurrent) =>
+              writer.applyFragment(update, transaction, isCurrent),
             restoreGuesses: (transaction, data) => {
               this.restoreGuesses(transaction, data);
             },
@@ -111,7 +115,7 @@ export class UpdatePipeline {
     // Acceptance is the single supersession point. Only a revision that never
     // reached its terminal state counts as superseded.
     const previous = state.activeUpdate;
-    state.abortStrategies();
+    state.abortStrategies(true);
     if (previous !== null && !previous.completed) state.supersededCount += 1;
     state.activeUpdate = transaction;
     deps.scheduler.acceptRevision(
@@ -212,6 +216,7 @@ export class UpdatePipeline {
       }
     }
     transaction.baseline = changes.baseline;
+    transaction.changedFields = changes.changed;
     transaction.changedPaths = changes.paths;
     transaction.structuralPaths = changes.structuralPaths;
     transaction.invalidated = refined ? NOTHING_CHANGED : changes.invalidated;

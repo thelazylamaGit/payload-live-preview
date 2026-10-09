@@ -251,14 +251,11 @@ describe('explicit fragment patch fields through runtime and HTTP strategy', () 
     expect(fetchFragment).not.toHaveBeenCalled();
   });
 
-  it('carries pending image rendering into the latest colour revision and rejects late responses', async () => {
+  it('finishes pending image rendering and rebases the latest permitted colour', async () => {
     const fetchFragment = start();
     await baseline(fetchFragment);
     const first = deferred<Response>();
-    const second = deferred<Response>();
-    fetchFragment
-      .mockImplementationOnce(() => first.promise)
-      .mockImplementationOnce(() => second.promise);
+    fetchFragment.mockImplementationOnce(() => first.promise);
     const items = blocks();
     items[0]!.image = 'new';
     post(items);
@@ -269,18 +266,13 @@ describe('explicit fragment patch fields through runtime and HTTP strategy', () 
     items[0]!.colour = '#f00';
     post(items);
     await tick();
-    expect(fetchFragment).toHaveBeenCalledTimes(2);
-    expect(fetchFragment.mock.calls[0]![1]!.signal?.aborted).toBe(true);
-    const latest = JSON.parse(
-      fetchFragment.mock.calls[1]![1]!.body as string,
-    ) as FragmentRequestBody;
-    second.resolve(response(latest));
-    await tick();
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
+    expect(fetchFragment.mock.calls[0]![1]!.signal?.aborted).toBe(false);
     first.resolve(response(firstBody));
     await tick();
     expect(document.querySelector('#a .image')?.textContent).toBe('new');
     expect(colour().style.backgroundColor).toBe('rgb(255, 0, 0)');
-    expect(runtime?.inspect().fragments.superseded).toBeGreaterThan(0);
+    expect(runtime?.inspect().fragments.superseded).toBe(0);
   });
 
   it('updates during sustained dragging using the existing maximum wait and the newest revision', async () => {

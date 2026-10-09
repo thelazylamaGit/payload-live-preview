@@ -169,7 +169,7 @@ describe('the reviewed inventory', () => {
     );
     expect(raw.map(([key]) => key)).toEqual([
       'src/security/sanitizer.ts::trustedHtml(html)',
-      'src/core/strategy-runner.ts::trustedHtml(html)',
+      'src/core/fragment-work.ts::trustedHtml(html)',
     ]);
   });
 });

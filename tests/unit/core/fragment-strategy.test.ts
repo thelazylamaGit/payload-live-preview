@@ -164,7 +164,7 @@ describe('fragment strategy', () => {
     expect(rt.inspect().fragments).toMatchObject({ rendered: 0, failed: 1 });
   });
 
-  it('aborts an in-flight render when a newer revision arrives and applies only the newest', async () => {
+  it('coalesces newer server edits and discards the incompatible in-flight render', async () => {
     const signals: AbortSignal[] = [];
     let release: (() => void) | undefined;
     const rt = start((request) => {
@@ -185,9 +185,11 @@ describe('fragment strategy', () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
     const done = once('afterUpdate');
     post({ title: 'second' });
-    await done;
-    expect(signals[0]?.aborted).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.aborted).toBe(false);
     release?.();
+    await done;
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(document.querySelector('h1')?.textContent).toBe('second');
     expect(rt.inspect().fragments.superseded).toBe(1);
