@@ -4,11 +4,11 @@
 
 ```ts
 
-import { a } from '../../fragment-endpoint-BiMcnWTQ.js';
-import { b } from '../../fragment-endpoint-BiMcnWTQ.js';
-import { c } from '../../fragment-endpoint-BiMcnWTQ.js';
-import { F } from '../../fragment-endpoint-BiMcnWTQ.js';
-import { d as FragmentRenderInput } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { a } from '../../fragment-endpoint-BRVT3Mus.js';
+import { b } from '../../fragment-endpoint-BRVT3Mus.js';
+import { c } from '../../fragment-endpoint-BRVT3Mus.js';
+import { F } from '../../fragment-endpoint-BRVT3Mus.js';
+import { d as FragmentRenderInput } from '../../fragment-endpoint-BRVT3Mus.js';
 import { P as PreviewAdapterOptions } from '../../options-BciKoFeg.js';
 
 // @public

@@ -53,6 +53,10 @@ export interface FragmentRegistryEntry<Component, Props extends object = object>
   readonly component: Component;
   /** Props for the component, computed from the input; never from request-controlled code. */
   readonly props: (input: FragmentRenderInput) => Props | Promise<Props>;
+  /** Complete replacement permissions, calculated only when this entry renders. */
+  readonly patchFields?: (
+    input: FragmentRenderInput,
+  ) => readonly string[] | Promise<readonly string[]>;
 }
 
 export type FragmentRegistry<Component> = Readonly<
@@ -261,12 +265,16 @@ export function createFragmentEndpointHandler<Component>(
     };
     const started = Date.now();
     let html: string;
+    let patchFields: readonly string[] | undefined;
     try {
       const props = await withTimeout(Promise.resolve(entry.props(input)), timeoutMs);
       // The one widening: the site types its props as it likes (see
       // FragmentRegistryEntry), the renderer takes a record of them.
       const record = props as Record<string, unknown>;
       html = await withTimeout(render(entry.component, record, input), timeoutMs);
+      if (entry.patchFields !== undefined) {
+        patchFields = await withTimeout(Promise.resolve(entry.patchFields(input)), timeoutMs);
+      }
     } catch (error) {
       // The response stays generic; the server log is where the cause belongs,
       // and without it a 500 here is a boundary that silently never renders.
@@ -278,6 +286,7 @@ export function createFragmentEndpointHandler<Component>(
     }
     const response: FragmentResponseBody = {
       html,
+      ...(patchFields === undefined ? {} : { patchFields }),
       boundary: { id: body.fragment, ...(body.key !== undefined ? { key: body.key } : {}) },
       revision: body.revision,
       metadata: {

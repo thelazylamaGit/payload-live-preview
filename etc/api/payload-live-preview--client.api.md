@@ -153,7 +153,7 @@ export interface FragmentContext {
     // (undocumented)
     readonly locale: string | undefined;
     readonly log: (code: DiagnosticCode, detail: string) => void;
-    readonly morph: (boundary: Element, html: string) => void;
+    readonly morph: (boundary: Element, html: string, patchFields?: readonly string[]) => void;
     readonly patch: (boundary: Element) => void;
     // (undocumented)
     readonly receivedAt: number;

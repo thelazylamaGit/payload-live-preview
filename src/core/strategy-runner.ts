@@ -230,8 +230,11 @@ export class StrategyRunner {
       log: (code, detail) => {
         deps.log('fragment', code, detail);
       },
-      morph: (boundary, html) => {
+      morph: (boundary, html, patchFields) => {
         morphFragment(boundary, html);
+        if (patchFields !== undefined) {
+          boundary.setAttribute('data-payload-patch-fields', patchFields.join(','));
+        }
         // Indexed patch bindings must follow the server's new order immediately.
         if (boundary.hasAttribute('data-payload-patch-fields')) this.host.rebuildCache();
       },

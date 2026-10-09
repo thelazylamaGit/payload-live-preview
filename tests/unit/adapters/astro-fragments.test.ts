@@ -78,6 +78,27 @@ async function validBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createFragmentEndpoint — the happy path', () => {
+  it('calculates replacement permissions only for an opted-in rendered entry', async () => {
+    const patchFields = vi.fn(() => Promise.resolve(['title', 'colour']));
+    const handler = endpoint({ registry: { hero: { ...registry['hero'], patchFields } } });
+    const body = await validBody();
+    const response = await handler({
+      request: new Request(`${SITE}/payload/fragment`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ patchFields: ['title', 'colour'] });
+    expect(patchFields).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ fields: body.fields, revision: 3, id: 'hero' }),
+    );
+    const ordinary = await post(body);
+    expect(await ordinary.json()).not.toHaveProperty('patchFields');
+    expect(patchFields).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a registered boundary for an authorized preview and answers with no-store JSON', async () => {
     const response = await post(await validBody());
     expect(response.status).toBe(200);

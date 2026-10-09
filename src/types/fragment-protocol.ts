@@ -32,6 +32,8 @@ export interface FragmentRequestBody {
 export interface FragmentResponseBody {
   /** The boundary's new inner HTML. */
   readonly html: string;
+  /** Complete replacement permissions; omission preserves the boundary's current list. */
+  readonly patchFields?: readonly string[];
   readonly boundary: { readonly id: string; readonly key?: string };
   /** Echoes the request; the client discards a response for another revision. */
   readonly revision: number;
@@ -126,6 +128,13 @@ export function parseFragmentResponse(value: unknown): FragmentResponseBody | nu
   if (!isRecord(value)) return null;
   const { html, boundary, revision, metadata } = value;
   if (typeof html !== 'string') return null;
+  const patchFields = value['patchFields'];
+  if (
+    patchFields !== undefined &&
+    (!Array.isArray(patchFields) || patchFields.some((path) => typeof path !== 'string'))
+  ) {
+    return null;
+  }
   if (!isRecord(boundary) || typeof boundary['id'] !== 'string') return null;
   if (boundary['key'] !== undefined && typeof boundary['key'] !== 'string') return null;
   if (typeof revision !== 'number') return null;
