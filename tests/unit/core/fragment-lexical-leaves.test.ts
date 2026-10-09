@@ -50,10 +50,11 @@ function html(fields: Data): string {
     `<div data-payload-field="blocks.0.colour" data-payload-type="hexColor" data-payload-css-property="background-color" style="background-color:${fields.blocks[0]!.colour}"></div>`
   );
 }
-function response(body: FragmentRequestBody): Response {
+function response(body: FragmentRequestBody, patchFields?: readonly string[]): Response {
   return new Response(
     JSON.stringify({
       html: html(body.fields as Data),
+      ...(patchFields === undefined ? {} : { patchFields }),
       boundary: { id: body.fragment },
       revision: body.revision,
       metadata: { renderedAt: '2026-10-10T00:00:00Z', renderer: 'test' },
@@ -104,6 +105,69 @@ async function start(optIn = true, initial = data()) {
 }
 
 describe('direct Lexical text leaves inside an existing fragment', () => {
+  it('replaces obsolete permissions after a structural render and patches a new leaf directly', async () => {
+    const { fetchFragment, population } = await start();
+    const fields = data();
+    leaves(fields).push(text('Three'));
+    const replacement = [path(0), path(2), 'blocks.0.colour'];
+    fetchFragment.mockImplementationOnce((_url, init) =>
+      Promise.resolve(
+        response(JSON.parse(init!.body as string) as FragmentRequestBody, replacement),
+      ),
+    );
+    post(fields);
+    await tick();
+    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
+      replacement.join(','),
+    );
+    fetchFragment.mockClear();
+    population.mockClear();
+    leaves(fields)[2]!.text = 'New direct leaf';
+    fields.blocks[0]!.colour = '#fff';
+    post(fields);
+    await tick();
+    expect(document.querySelectorAll('span')[2]!.textContent).toBe('New direct leaf');
+    expect(document.querySelector('div')!.style.backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(fetchFragment).not.toHaveBeenCalled();
+    expect(population).not.toHaveBeenCalled();
+    leaves(fields)[1]!.text = 'No longer permitted';
+    post(fields);
+    await tick();
+    expect(fetchFragment).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([undefined, []] as const)(
+    'preserves omitted permissions and clears an empty list (%s)',
+    async (replacement) => {
+      const { fetchFragment } = await start();
+      const fields = data();
+      leaves(fields)[0]!.format = 1;
+      fetchFragment.mockImplementationOnce((_url, init) =>
+        Promise.resolve(
+          response(JSON.parse(init!.body as string) as FragmentRequestBody, replacement),
+        ),
+      );
+      post(fields);
+      await tick();
+      expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
+        replacement === undefined ? permissions : '',
+      );
+    },
+  );
+
+  it('leaves permissions unchanged after a failed response', async () => {
+    const { fetchFragment } = await start();
+    fetchFragment.mockResolvedValueOnce(
+      new Response(JSON.stringify({ patchFields: [] }), { status: 500 }),
+    );
+    const fields = data();
+    leaves(fields)[0]!.format = 1;
+    post(fields);
+    await tick();
+    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
+      permissions,
+    );
+  });
   it('renders edits to existing embedded component fields alongside text', async () => {
     const fields = data();
     const embedded = Object.assign(leaves(fields)[1]!, {
@@ -248,9 +312,12 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     expect(leaves(latest.fields as Data)[0]).toMatchObject({ text: 'Latest', format: 1 });
     second.resolve(response(latest));
     await tick();
-    first.resolve(response(old));
+    first.resolve(response(old, []));
     await tick();
     expect(document.querySelector('span')?.textContent).toBe('Latest');
+    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
+      permissions,
+    );
     fetchFragment.mockClear();
     leaves(fields)[0]!.text = 'After fragment';
     post(fields);

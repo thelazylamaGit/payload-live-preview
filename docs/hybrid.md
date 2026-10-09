@@ -634,13 +634,30 @@ another position conservatively render a fragment.
 After a structural fragment update, emit bindings using the new indices and
 recompute the exact safe leaf permissions from the same rendered document.
 Fragment responses replace the boundary's **inner HTML**; the outer boundary's
-`data-payload-patch-fields` attribute is retained. A page render can refresh that
-attribute. If your application refreshes permissions without a page render, its
-existing successful `fragmentRender` handler must replace the attribute with the
-new server-authored safe path list (including any colour permissions); remove
-obsolete paths and do not grant every binding permission automatically. The
-runtime already refreshes the binding cache after an opted-in fragment morph.
-Until permissions are refreshed, new or unpermitted leaves keep using fragments.
+permissions can be refreshed by opting the existing endpoint registry entry into
+`patchFields`:
+
+```ts
+registry: {
+  rich: {
+    component: RichBlock,
+    props: (input) => richBlockProps(input),
+    patchFields: (input) => [
+      ...safeTextLeafPaths(input), // Application helper using current render indices.
+      'blocks.0.colour',
+    ],
+  },
+}
+```
+
+The callback receives the same current render input as `props` and may return a
+promise. It runs only during an opted-in fragment request, after HTML rendering;
+direct text or colour updates reuse the current permissions without calling it.
+The response's `patchFields` completely replaces `data-payload-patch-fields` after
+a successful current render, before the existing binding-cache refresh. Include
+all desired colour permissions as well as exact safe leaf paths. An empty array
+clears the list; omission preserves it. Failed, aborted and stale responses leave
+permissions unchanged. Permissions are never inferred from the returned bindings.
 
 If an affected boundary has any server work, it renders once and its inner
 bindings are left alone. Other boundaries can patch independently. A newer direct

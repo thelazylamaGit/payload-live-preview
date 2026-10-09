@@ -19,7 +19,7 @@
   "totals": {
     "files": 338,
     "suites": 724,
-    "tests": 3072,
+    "tests": 3077,
     "benchmarks": 12
   },
   "groups": {
@@ -62,7 +62,7 @@
     "unit": {
       "files": 279,
       "suites": 648,
-      "tests": 2839,
+      "tests": 2844,
       "benchmarks": 0
     }
   },
@@ -491,7 +491,7 @@
       "path": "tests/unit/adapters/astro-fragments.test.ts",
       "group": "unit",
       "suites": 5,
-      "tests": 17,
+      "tests": 18,
       "benchmarks": 0
     },
     {
@@ -960,7 +960,7 @@
       "path": "tests/unit/core/fragment-lexical-leaves.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 6,
+      "tests": 9,
       "benchmarks": 0
     },
     {
@@ -1723,7 +1723,7 @@
       "path": "tests/unit/fragment/client.test.ts",
       "group": "unit",
       "suites": 3,
-      "tests": 15,
+      "tests": 16,
       "benchmarks": 0
     },
     {

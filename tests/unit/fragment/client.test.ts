@@ -48,6 +48,30 @@ function rendered(html = '<h1>S</h1>', revision = 7, id = 'hero', key?: string):
 }
 
 describe('createFragmentStrategy — the request', () => {
+  it.each([null, 'title', ['title', 1]])(
+    'rejects malformed patchFields (%s)',
+    async (patchFields) => {
+      const handler = createFragmentHandler({
+        endpoint: ENDPOINT,
+        location: LOCATION,
+        fetch: () =>
+          Promise.resolve(
+            json({
+              html: '<h1>Changed</h1>',
+              boundary: { id: 'hero' },
+              revision: 7,
+              metadata: { renderedAt: '2026-10-10', renderer: 'test' },
+              patchFields,
+            }),
+          ),
+      });
+      expect(await handler(request(), boundary())).toMatchObject({
+        status: 'failed',
+        code: 'LP0802',
+      });
+    },
+  );
+
   it('refuses an endpoint that is not a same-origin path', () => {
     expect(() => createFragmentStrategy({ endpoint: 'https://evil.example/x' })).toThrow(
       /same-origin path/u,

@@ -32,7 +32,7 @@ export interface FragmentContext {
   /** Whether this revision is still the current one. */
   readonly isCurrent: () => boolean;
   /** Morph server-rendered HTML into a boundary (Trusted Types and the keyed morph apply). */
-  readonly morph: (boundary: Element, html: string) => void;
+  readonly morph: (boundary: Element, html: string, patchFields?: readonly string[]) => void;
   /** Patch the boundary's own bindings from this revision — the deterministic fallback. */
   readonly patch: (boundary: Element) => void;
   /** Debug log through the runtime's logger, with the diagnostic code. */

@@ -211,7 +211,12 @@ export function createFragmentHandler(options: FragmentStrategyOptions): Fragmen
         return failed('LP0802', 'response is for another boundary');
       }
       if (fragment.revision !== request.revision) return SUPERSEDED;
-      return { status: 'rendered', html: fragment.html, metadata: fragment.metadata };
+      return definedOnly({
+        status: 'rendered' as const,
+        html: fragment.html,
+        metadata: fragment.metadata,
+        patchFields: fragment.patchFields,
+      });
     } finally {
       timeout.dispose();
     }

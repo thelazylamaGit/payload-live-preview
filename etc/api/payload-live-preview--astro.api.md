@@ -4,14 +4,14 @@
 
 ```ts
 
-import { a } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { a } from '../../fragment-endpoint-BRVT3Mus.js';
 import { A as AUTHORIZATION_LOCALS_KEY } from '../../locals-UoaZ9KIu.js';
 import { a as AUTHORIZATION_OUTCOME_LOCALS_KEY } from '../../locals-UoaZ9KIu.js';
-import { b } from '../../fragment-endpoint-BiMcnWTQ.js';
-import { c } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { b } from '../../fragment-endpoint-BRVT3Mus.js';
+import { c } from '../../fragment-endpoint-BRVT3Mus.js';
 import { c as createLivePreviewMiddleware } from '../../middleware-B-sZNppU.js';
-import { F } from '../../fragment-endpoint-BiMcnWTQ.js';
-import { d as FragmentRenderInput } from '../../fragment-endpoint-BiMcnWTQ.js';
+import { F } from '../../fragment-endpoint-BRVT3Mus.js';
+import { d as FragmentRenderInput } from '../../fragment-endpoint-BRVT3Mus.js';
 import { h as hasPreviewIntent } from '../../options-BciKoFeg.js';
 import { L as LivePreviewAstroOptions } from '../../middleware-B-sZNppU.js';
 import { L as LivePreviewLocals } from '../../locals-UoaZ9KIu.js';

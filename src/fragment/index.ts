@@ -100,7 +100,8 @@ export function fragmentStrategyFrom(handler: FragmentHandler): FragmentStrategy
             return;
           }
           if (outcome.status === 'rendered') {
-            context.morph(element, outcome.html);
+            if (outcome.patchFields === undefined) context.morph(element, outcome.html);
+            else context.morph(element, outcome.html, outcome.patchFields);
             context.rendered(element, boundary.id, boundary.key);
             report.rendered += 1;
             return;
