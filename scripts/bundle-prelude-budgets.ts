@@ -85,7 +85,7 @@
 // 2026-09-19 (the sanitizer empties `is`): raw 126_568 → 126_609 (+41 B), gzip 40_022 → 40_032 (+10 B), brotli 35_100 → 35_117 (+17 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, LP0808 once for an escalation with nowhere to go, and `canEscalate`. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: the sanitizer document named per call): raw 126_609 → 126_672 (+63 B), gzip 40_032 → 40_060 (+28 B), brotli 35_117 → 35_132 (+15 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, LP0808 once for an escalation with nowhere to go, and `canEscalate`. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: one scope per runtime session): raw 126_672 → 127_186 (+514 B), gzip 40_060 → 40_258 (+198 B), brotli 35_132 → 35_312 (+180 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, LP0808 once for an escalation with nowhere to go, and `canEscalate`. The log in bundle-budgets.ts has the whole change.
-export const INLINE_FRAGMENT_BUDGET = { raw: 133005, gzip: 41890, brotli: 36701 } as const;
+export const INLINE_FRAGMENT_BUDGET = { raw: 133668, gzip: 42107, brotli: 36918 } as const;
 
 /**
  * The inline script with the route prelude and no fragment endpoint: the
@@ -174,7 +174,7 @@ export const INLINE_FRAGMENT_BUDGET = { raw: 133005, gzip: 41890, brotli: 36701 
 // 2026-09-19 (the sanitizer empties `is`): raw 121_616 → 121_657 (+41 B), gzip 38_444 → 38_453 (+9 B), brotli 33_814 → 33_819 (+5 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, LP0808 once for an escalation with nowhere to go, and `canEscalate`. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: the sanitizer document named per call): raw 121_657 → 121_720 (+63 B), gzip 38_453 → 38_481 (+28 B), brotli 33_819 → 33_851 (+32 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, LP0808 once for an escalation with nowhere to go, and `canEscalate`. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: one scope per runtime session): raw 121_720 → 122_234 (+514 B), gzip 38_481 → 38_675 (+194 B), brotli 33_851 → 34_027 (+176 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, LP0808 once for an escalation with nowhere to go, and `canEscalate`. The log in bundle-budgets.ts has the whole change.
-export const INLINE_ROUTE_BUDGET = { raw: 128051, gzip: 40333, brotli: 35375 } as const;
+export const INLINE_ROUTE_BUDGET = { raw: 128714, gzip: 40547, brotli: 35517 } as const;
 
 // 2026-10-08: explicit fragment patch fields, precise path fingerprints, the safe
 // hex-colour renderer, pending-render debt and revision-aware burst scheduling.
@@ -184,3 +184,9 @@ export const INLINE_ROUTE_BUDGET = { raw: 128051, gzip: 40333, brotli: 35375 } a
 // 2026-10-09: fragment and route recovery plus two bounded transient retries.
 // Ceilings move by the measured increase over an isolated HEAD build on the
 // same Node 22.22.3 host; existing compression cushions are preserved.
+
+// 2026-10-10: direct Lexical text-leaf fingerprints and conservative node-move
+// detection. Exceeded ceilings move by exact before/after Node 22.22.3
+// measurements, preserving existing cushions; other ceilings stay fixed.
+// Full runtime: +663 raw / +216 gzip (level 9) / +197 brotli bytes.
+// Lean: +78 raw / +23 gzip / +13 brotli bytes for tracker state only.

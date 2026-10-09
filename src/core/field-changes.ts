@@ -27,6 +27,7 @@ export class FieldChangeTracker {
   private previous: Map<string, string | undefined> | null = null;
 
   private previousPaths: Map<string, string | undefined> | null = null;
+  private lexicalOrders: Map<string, readonly (string | undefined)[]> | null = null;
 
   /** Diff `fields` against the previous message and remember them for the next call. */
   diff(
@@ -59,7 +60,8 @@ export class FieldChangeTracker {
     const paths = new Set<string>();
     const structuralPaths = new Set<string>();
     if (trackPaths && !(typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__)) {
-      const nextPaths = pathIdentities(fields);
+      const orders = new Map<string, readonly (string | undefined)[]>();
+      const nextPaths = pathIdentities(fields, orders);
       for (const [path, identity] of nextPaths) {
         if (identity === undefined || this.previousPaths?.get(path) !== identity) {
           paths.add(path);
@@ -79,9 +81,26 @@ export class FieldChangeTracker {
           }
         }
       }
+      for (const [path, order] of orders) {
+        const previousOrder = this.lexicalOrders?.get(path);
+        // A surviving node at another position is a move, even when its only
+        // distinguishing value is text. Ambiguous edits stay on the server.
+        if (
+          previousOrder &&
+          order.some(
+            (id, index) =>
+              id !== undefined && id !== previousOrder[index] && previousOrder.includes(id),
+          )
+        ) {
+          paths.add(path);
+          structuralPaths.add(path);
+        }
+      }
       this.previousPaths = nextPaths;
+      this.lexicalOrders = orders;
     } else {
       this.previousPaths = null;
+      this.lexicalOrders = null;
     }
     return { changed, invalidated, baseline, paths, structuralPaths };
   }
@@ -89,33 +108,71 @@ export class FieldChangeTracker {
   reset(): void {
     this.previous = null;
     this.previousPaths = null;
+    this.lexicalOrders = null;
   }
 }
 
 /** Fingerprints using the existing identity function; no retained document copy. */
 function pathIdentities(
   fields: Readonly<Record<string, unknown>>,
+  orders: Map<string, readonly (string | undefined)[]>,
 ): Map<string, string | undefined> {
   const result = new Map<string, string | undefined>();
   const seen = new WeakSet();
-  const visit = (value: unknown, path: string): void => {
+  const visit = (value: unknown, path: string, lexical = false): string | undefined => {
     if (value === null || typeof value !== 'object') {
-      result.set(path, valueIdentity(value));
-      return;
+      const identity = valueIdentity(value);
+      result.set(path, identity);
+      return identity;
     }
     if (seen.has(value)) {
       result.set(path, undefined);
-      return;
+      return undefined;
     }
     seen.add(value);
     const entries = Object.entries(value);
+    const record = value as Record<string, unknown>;
+    // Only follow Lexical children edges from a root. Embedded node fields
+    // keep their full identity; ordinary positional arrays are unchanged.
+    const node =
+      !Array.isArray(value) &&
+      typeof record['type'] === 'string' &&
+      (lexical || (path.endsWith('.root') && record['type'] === 'root'));
+    const children =
+      lexical &&
+      Array.isArray(value) &&
+      value.every(
+        (item) =>
+          item !== null &&
+          typeof item === 'object' &&
+          !Array.isArray(item) &&
+          typeof (item as Record<string, unknown>)['type'] === 'string',
+      );
+    const content: unknown[][] = [];
+    for (const [key, child] of entries) {
+      const childLexical = children || (node && key === 'children');
+      const identity = visit(child, path + '.' + key, childLexical);
+      if (lexical || node) {
+        content.push([
+          key,
+          node && record['type'] === 'text' && key === 'text' && typeof child === 'string'
+            ? 'text-value'
+            : childLexical
+              ? identity
+              : valueIdentity(child),
+        ]);
+      }
+    }
+    if (children) orders.set(path, value.map(valueIdentity));
     const shape = Array.isArray(value)
-      ? ['array', arrayIdentity(value)]
+      ? ['array', children ? [value.length, content] : arrayIdentity(value)]
       : ['object', entries.map(([key]) => key).sort()];
     const identity = valueIdentity(shape);
     result.set(path, identity === undefined ? undefined : 'container:' + identity);
-    for (const [key, child] of entries) visit(child, path.length === 0 ? key : path + '.' + key);
     seen.delete(value);
+    return (!lexical && !node) || content.some(([, identity]) => identity === undefined)
+      ? undefined
+      : valueIdentity(content);
   };
   for (const [key, value] of Object.entries(fields)) visit(value, key);
   return result;

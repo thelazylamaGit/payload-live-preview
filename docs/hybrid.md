@@ -503,12 +503,46 @@ Keep rendering your existing block components in the fragment endpoint, and have
 those components emit the same indexed bindings. `patchFields` uses the existing
 dotted field paths, including numeric array indices; it has no wildcards and does
 not inherit permission to descendants. `bindByPath` drops array indices, so use
-`bind` for an indexed instance. Arrays need stable item `id`s for direct edits;
-without them changes conservatively render on the server. Reordering, insertion,
+`bind` for an indexed instance. Ordinary arrays need stable item `id`s for direct
+edits; without them changes conservatively render on the server. Reordering, insertion,
 removal, block-type changes, unknown or unbound paths, initial synchronisation and
 forced renders keep the server path. Reordering refreshes bindings immediately.
 New slots beyond the declared indices remain server-rendered until the boundary's
 configuration is updated (for example, by a page render).
+
+Lexical `children` arrays under a `root` node are the narrow exception: existing
+`type: 'text'` nodes can change their string `text` values without a fragment,
+provided every relevant changed path is explicitly permitted and bound inside
+that boundary. Have the Astro project's existing rich-text template wrap each
+safe text leaf in an ordinary text binding, inside its server-rendered formatting:
+
+```astro
+<strong><span
+  {...preview.bind('blocks.0.content.root.children.0.children.0.text', { type: 'text' })}
+>{node.text}</span></strong>
+```
+
+This emits `data-payload-field="blocks.0.content.root.children.0.children.0.text"`
+and `data-payload-type="text"` in authorized preview. Add that same exact path to
+the enclosing boundary's `patchFields`. Generate paths from the current block
+and Lexical child indices in the existing Astro template; bind the span containing
+only that leaf's text, rather than a paragraph containing multiple leaves. Keep
+bindings for empty existing leaves too. No client renderer or registration is
+needed. Formatting, style, node metadata, splitting/merging, insertion/removal,
+reordering and embedded-component edits still require fragments, including when
+mixed with text edits. Ambiguous edits that look like a surviving node moving to
+another position conservatively render a fragment.
+
+After a structural fragment update, emit bindings using the new indices and
+recompute the exact safe leaf permissions from the same rendered document.
+Fragment responses replace the boundary's **inner HTML**; the outer boundary's
+`data-payload-patch-fields` attribute is retained. A page render can refresh that
+attribute. If your application refreshes permissions without a page render, its
+existing successful `fragmentRender` handler must replace the attribute with the
+new server-authored safe path list (including any colour permissions); remove
+obsolete paths and do not grant every binding permission automatically. The
+runtime already refreshes the binding cache after an opted-in fragment morph.
+Until permissions are refreshed, new or unpermitted leaves keep using fragments.
 
 If an affected boundary has any server work, it renders once and its inner
 bindings are left alone. Other boundaries can patch independently. A newer direct

@@ -17,9 +17,9 @@
     "vitest.stryker.config.ts"
   ],
   "totals": {
-    "files": 336,
-    "suites": 722,
-    "tests": 3051,
+    "files": 337,
+    "suites": 723,
+    "tests": 3059,
     "benchmarks": 12
   },
   "groups": {
@@ -60,9 +60,9 @@
       "benchmarks": 0
     },
     "unit": {
-      "files": 277,
-      "suites": 646,
-      "tests": 2818,
+      "files": 278,
+      "suites": 647,
+      "tests": 2826,
       "benchmarks": 0
     }
   },
@@ -918,7 +918,7 @@
       "path": "tests/unit/core/field-changes.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 5,
+      "tests": 7,
       "benchmarks": 0
     },
     {
@@ -947,6 +947,13 @@
       "group": "unit",
       "suites": 1,
       "tests": 1,
+      "benchmarks": 0
+    },
+    {
+      "path": "tests/unit/core/fragment-lexical-leaves.test.ts",
+      "group": "unit",
+      "suites": 1,
+      "tests": 6,
       "benchmarks": 0
     },
     {

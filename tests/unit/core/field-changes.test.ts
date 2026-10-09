@@ -45,4 +45,26 @@ describe('FieldChangeTracker', () => {
     tracker.reset();
     expect([...tracker.diff({ a: 1 }, {}).changed]).toEqual(['a']);
   });
+
+  it('keeps ordinary ID-less children arrays structural, even with text-shaped items', () => {
+    const tracker = new FieldChangeTracker();
+    const fields = (text: string) => ({ content: { children: [{ type: 'text', text }] } });
+    tracker.diff(fields('One'), {}, true);
+    const changes = tracker.diff(fields('Two'), {}, true);
+    expect(changes.structuralPaths.has('content.children')).toBe(true);
+  });
+
+  it('does no path tracking without opt-in and forgets Lexical order history on reset', () => {
+    const tracker = new FieldChangeTracker();
+    const fields = (values: string[]) => ({
+      content: { root: { type: 'root', children: values.map((text) => ({ type: 'text', text })) } },
+    });
+    expect(tracker.diff(fields(['One', 'Two']), {}).paths.size).toBe(0);
+    tracker.diff(fields(['One', 'Two']), {}, true);
+    tracker.reset();
+    expect(tracker.diff(fields(['Two', 'One']), {}, true).baseline).toBe(true);
+    const changes = tracker.diff(fields(['Edited', 'One']), {}, true);
+    expect([...changes.paths]).toEqual(['content.root.children.0.text']);
+    expect(changes.structuralPaths.size).toBe(0);
+  });
 });
