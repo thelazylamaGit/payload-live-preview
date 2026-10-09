@@ -116,7 +116,7 @@ export class MergeNeed {
             true,
       ) &&
       deps.strategies.fragment
-        ?.plan(deps.root, changed)
+        ?.plan(deps.root, changed, { paths, boundaries: deps.cache.fragments })
         .every((boundary) => canPatchFragment(deps, boundary, paths, structuralPaths)) === true
     ) {
       const fields = overlayPaths(this.resolved ?? raw, raw, paths);

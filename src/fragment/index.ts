@@ -62,8 +62,10 @@ export {
  */
 export function fragmentStrategyFrom(handler: FragmentHandler): FragmentStrategy {
   return {
-    plan: (root, changedFields) =>
-      collectFragmentBoundaries(root, changedFields).map((boundary) => boundary.element),
+    plan: (root, changedFields, options) =>
+      collectFragmentBoundaries(root, changedFields, options?.paths, options?.boundaries).map(
+        (boundary) => boundary.element,
+      ),
     async render(context: FragmentContext, elements: readonly Element[]): Promise<FragmentReport> {
       const report = { rendered: 0, failed: 0, superseded: 0 };
       const request: StrategyRequest = {

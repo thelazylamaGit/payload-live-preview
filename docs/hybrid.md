@@ -461,6 +461,104 @@ fragment A can never overwrite fast fragment B.
 
 ## Direct bindings inside a fragment
 
+### Keyed child fragments for block lists
+
+An outer list boundary can delegate edits within existing blocks to keyed child
+boundaries. Declare the list dependency at `blocks`, and each child's dependency
+at its current indexed path. Use the block's stable ID as its fragment key and
+DOM morph key:
+
+```astro
+---
+const { page, preview } = Astro.props;
+---
+<section {...preview.owner()} {...preview.boundary('page-blocks', {
+  dependsOn: ['blocks'],
+})}>
+  {page.blocks.map((block, index) => (
+    <article data-payload-key={block.id} {...preview.boundary('page-block', {
+      key: String(block.id),
+      dependsOn: [`blocks.${index}`],
+      patchFields: [`blocks.${index}.colour`],
+    })}>
+      <h2 {...preview.bind(`blocks.${index}.title`)}>{block.title}</h2>
+      <div {...preview.bind(`blocks.${index}.colour`, {
+        cssProperty: 'background-color',
+      })} style={`background-color: ${block.colour}`} />
+      <!-- Render the rest of this block with your existing Astro components. -->
+    </article>
+  ))}
+</section>
+```
+
+A title edit renders only `page-block` with that block's key; edits to several
+blocks render the affected siblings independently. Insertion, removal, reorder
+and block-type changes render only `page-blocks`. A selected parent suppresses
+all descendant requests and direct writes. An explicitly permitted colour edit
+can still patch directly; a colour edit mixed with a server edit in the same
+child belongs to that child's render. Child coverage grants no patch permission.
+
+Use a unique `(fragment ID, key)` pair across the page: the existing request
+deduplication uses that pair and the revision. Children must have unique sibling
+keys, explicit dependencies narrower than their parent's matching dependencies,
+and the same owner. Missing/ambiguous keys, broad child dependencies, uncovered
+changes, initial synchronisation and forced rendering conservatively keep the
+parent. Ordinary ID-less block arrays also retain parent rendering.
+
+The list template must treat block interiors as child-owned regions. If a block
+field also affects list markup (for example a summary computed from its title),
+declare that exact dependency on the parent too:
+`dependsOn: ['blocks', 'blocks.0.title']`. This prevents delegation for that field.
+Dependencies are promises about rendering effects, not automatically discovered
+server calculations. Pages without nested boundaries keep their existing plan.
+
+Register both components in the existing Astro fragment endpoint. The list entry
+renders the list's **inner HTML**, including new child wrappers; the child entry
+renders only the selected article's **inner HTML**. With your existing component
+and authorization setup, the child props function can select the block by key:
+
+```ts
+registry: {
+  'page-blocks': {
+    component: BlockListContents,
+    props: ({ fields, authorization }) => ({ page: fields, authorization }),
+  },
+  'page-block': {
+    component: BlockContents,
+    props: ({ fields, key, authorization }) => {
+      const blocks = fields.blocks as Page['blocks'];
+      const matches = blocks.flatMap((block, index) =>
+        String(block.id) === key ? [{ block, index }] : []);
+      if (matches.length !== 1) throw new Error('Unknown or ambiguous block key');
+      const { block, index } = matches[0]!;
+      return { block, index, fieldPath: `blocks.${index}`, authorization };
+    },
+  },
+}
+```
+
+`Page` and the two components are your project's existing types/templates. Each
+component creates its existing request-authorized `preview` helper with the same
+owner. The request sends the registry ID, stable key, revision and complete
+unsaved fields; it does not send a trusted block index or component path. Resolve
+the key against those fields, derive the current index server-side, and reject a
+missing or duplicate key. The existing endpoint echoes both ID and key; the
+client checks both along with the revision before applying HTML.
+
+After a list render, generate child dependencies, bindings and `patchFields`
+from the new indices in the response. The runtime refreshes its boundary and
+binding cache immediately. A child render retains its outer article attributes;
+it must not change the block's key, type or position. Pending parent work continues
+to own the list until it succeeds, and pending child work superseded by a reorder
+is satisfied by the successful list render. The existing fragment failure,
+retry and stale-response handling still apply.
+
+If nested boundaries appear for the first time after startup, the first precise
+diff may conservatively synchronise the parent to establish its path baseline.
+An established baseline survives a list becoming empty and being filled again.
+
+### Explicit direct-binding permissions
+
 `preview.boundary(id, { dependsOn, patchFields })` explicitly permits **exact bound
 field paths** to update without re-rendering that boundary. The declaration is a
 promise that those values have no other server-rendered effects there: do not opt

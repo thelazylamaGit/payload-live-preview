@@ -197,7 +197,9 @@ export class UpdatePipeline {
     const changes = state.changes.diff(
       data.fields,
       dependencies,
-      deps.root.querySelector('[data-payload-patch-fields]') !== null,
+      deps.cache.hasNestedFragments ||
+        (deps.cache.fragments.length > 0 && state.changes.trackingPaths) ||
+        deps.root.querySelector('[data-payload-patch-fields]') !== null,
     );
     if (changes.baseline && !refined && deps.autoBind !== 'off') {
       // Once, on the message that describes what the server rendered (ADR 0014

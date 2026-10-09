@@ -1,6 +1,8 @@
 /** Explicit patch contract shared by fragment and population planning. */
 import { parseDependencyList } from './dependencies';
 import type { RuntimeDeps } from './runtime-state';
+import type { FragmentPlan } from './strategy-runner';
+import type { FragmentStrategy } from './strategies';
 
 export function canPatchFragment(
   deps: RuntimeDeps,
@@ -33,4 +35,35 @@ export function canPatchFragment(
           ) === true,
     )
   );
+}
+
+/** A parent owns its descendants' requests and writes for this revision. */
+export function planBoundaries(
+  strategy: FragmentStrategy,
+  boundaries: readonly Element[],
+): FragmentPlan {
+  const covered = new Set(boundaries);
+  const ancestorCovered = (element: Element): boolean => {
+    let parent = element.parentElement?.closest('[data-payload-fragment]');
+    while (parent != null) {
+      if (covered.has(parent)) return true;
+      parent = parent.parentElement?.closest('[data-payload-fragment]');
+    }
+    return false;
+  };
+  boundaries = boundaries.filter((boundary) => !ancestorCovered(boundary));
+  const ownership = new WeakMap<Element, boolean>();
+  return {
+    boundaries,
+    strategy,
+    covers: (target) => {
+      const boundary = target.fragmentBoundary;
+      if (boundary === undefined) return false;
+      const cached = ownership.get(boundary);
+      if (cached !== undefined) return cached;
+      const result = covered.has(boundary) || ancestorCovered(boundary);
+      ownership.set(boundary, result);
+      return result;
+    },
+  };
 }

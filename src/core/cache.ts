@@ -11,7 +11,7 @@ import {
   type DependencyMap,
 } from './dependencies';
 import { collectIslands } from './islands';
-import { enclosingFragment, resolveStrategy } from './strategies';
+import { enclosingFragment, FRAGMENT_ATTRIBUTE, resolveStrategy } from './strategies';
 import type { CachedElement, ElementPredicate, FieldType, RendererKey } from './types';
 
 export const FIELD_ATTRIBUTE = 'data-payload-field';
@@ -63,6 +63,9 @@ export const BINDING_ATTRIBUTES: readonly string[] = [
   STRATEGY_ATTRIBUTE,
   BOUNDARY_ATTRIBUTE,
   INPUT_TYPE_ATTRIBUTE,
+  FRAGMENT_ATTRIBUTE,
+  'data-payload-fragment-key',
+  'data-payload-patch-fields',
 ];
 
 const FIELD_SELECTOR = `[${FIELD_ATTRIBUTE}]`;
@@ -132,6 +135,17 @@ export class ElementCache {
   private count = 0;
   private dependencies: DependencyMap | null = null;
   private islandRoots: readonly Element[] = [];
+  private fragmentRoots: readonly Element[] = [];
+  private nestedFragments = false;
+
+  /** Fragment anchors, collected during the existing binding-cache scan. */
+  get fragments(): readonly Element[] {
+    return this.fragmentRoots;
+  }
+
+  get hasNestedFragments(): boolean {
+    return this.nestedFragments;
+  }
 
   constructor(options: ElementCacheOptions = {}) {
     this.filter = options.filter ?? alwaysTrue;
@@ -159,9 +173,24 @@ export class ElementCache {
     const t0 = performance.now();
     this.clear();
     let elementCount = 0;
-    for (const element of root.querySelectorAll(FIELD_SELECTOR)) {
-      if (this.add(element) !== undefined) elementCount += 1;
+    const includeFragments = !(typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__);
+    const fragments: Element[] = [];
+    for (const element of root.querySelectorAll(
+      includeFragments ? `${FIELD_SELECTOR},[${FRAGMENT_ATTRIBUTE}]` : FIELD_SELECTOR,
+    )) {
+      if (includeFragments && element.hasAttribute(FRAGMENT_ATTRIBUTE)) fragments.push(element);
+      if (element.hasAttribute(FIELD_ATTRIBUTE) && this.add(element) !== undefined) {
+        elementCount += 1;
+      }
     }
+    this.fragmentRoots = fragments;
+    const boundaries = new Set(fragments);
+    this.nestedFragments =
+      includeFragments &&
+      fragments.some((element) => {
+        const parent = element.parentElement?.closest(`[${FRAGMENT_ATTRIBUTE}]`);
+        return parent != null && boundaries.has(parent);
+      });
     this.islandRoots = collectIslands(root);
     return {
       elementCount,
@@ -236,6 +265,8 @@ export class ElementCache {
     this.count = 0;
     this.dependencies = null;
     this.islandRoots = [];
+    this.fragmentRoots = [];
+    this.nestedFragments = false;
   }
 
   /** Replace in place when the field bucket is unchanged, preserving order. */

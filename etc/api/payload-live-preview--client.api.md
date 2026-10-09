@@ -177,7 +177,10 @@ export interface FragmentReport {
 
 // @public
 export interface FragmentStrategy {
-    readonly plan: (root: ParentNode, changedFields: ReadonlySet<string>) => readonly Element[];
+    readonly plan: (root: ParentNode, changedFields: ReadonlySet<string>, options?: {
+        readonly paths?: ReadonlySet<string>;
+        readonly boundaries: readonly Element[];
+    }) => readonly Element[];
     readonly render: (context: FragmentContext, boundaries: readonly Element[]) => Promise<FragmentReport>;
 }
 

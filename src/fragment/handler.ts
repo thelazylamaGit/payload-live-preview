@@ -207,7 +207,7 @@ export function createFragmentHandler(options: FragmentStrategyOptions): Fragmen
       }
       const fragment = parseFragmentResponse(parsed);
       if (fragment === null) return failed('LP0802', 'response has the wrong shape');
-      if (fragment.boundary.id !== boundary.id) {
+      if (fragment.boundary.id !== boundary.id || fragment.boundary.key !== boundary.key) {
         return failed('LP0802', 'response is for another boundary');
       }
       if (fragment.revision !== request.revision) return SUPERSEDED;

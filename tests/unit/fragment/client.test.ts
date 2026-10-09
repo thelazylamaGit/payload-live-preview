@@ -38,10 +38,10 @@ function json(
   });
 }
 
-function rendered(html = '<h1>S</h1>', revision = 7, id = 'hero'): Response {
+function rendered(html = '<h1>S</h1>', revision = 7, id = 'hero', key?: string): Response {
   return json({
     html,
-    boundary: { id },
+    boundary: { id, ...(key === undefined ? {} : { key }) },
     revision,
     metadata: { renderedAt: '2026-08-27T00:00:00Z', renderer: 'test' },
   });
@@ -57,7 +57,9 @@ describe('createFragmentStrategy — the request', () => {
   });
 
   it('posts the boundary, the page route and query, the revision and the fields, same-origin with credentials', async () => {
-    const fetchFn = vi.fn<FetchLike>(() => Promise.resolve(rendered()));
+    const fetchFn = vi.fn<FetchLike>(() =>
+      Promise.resolve(rendered('<h1>S</h1>', 7, 'hero', 'k1')),
+    );
     const strategy = createFragmentHandler({
       endpoint: ENDPOINT,
       fetch: fetchFn,
@@ -81,6 +83,18 @@ describe('createFragmentStrategy — the request', () => {
       fields: { title: 'T' },
     });
     expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('rejects a sibling response carrying the wrong fragment key', async () => {
+    const handler = createFragmentHandler({
+      endpoint: ENDPOINT,
+      location: LOCATION,
+      fetch: () => Promise.resolve(rendered('<h1>Wrong sibling</h1>', 7, 'hero', 'other')),
+    });
+    expect(await handler(request(), boundary('hero', 'wanted'))).toMatchObject({
+      status: 'failed',
+      code: 'LP0802',
+    });
   });
 
   it('shares one request between identical boundaries of the same revision', async () => {

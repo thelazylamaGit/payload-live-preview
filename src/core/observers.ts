@@ -6,6 +6,7 @@
  */
 
 import { BINDING_ATTRIBUTES, FIELD_ATTRIBUTE, OWNER_ATTRIBUTE } from './cache';
+import { FRAGMENT_ATTRIBUTE } from './strategies';
 
 export interface ObserverCallbacks {
   readonly onStructuralChange: () => void;
@@ -166,6 +167,9 @@ function hasStructuralImpact(mutations: readonly MutationRecord[]): boolean {
       if (
         m.attributeName === FIELD_ATTRIBUTE ||
         m.attributeName === OWNER_ATTRIBUTE ||
+        m.attributeName === FRAGMENT_ATTRIBUTE ||
+        (m.target.nodeType === ELEMENT_NODE &&
+          (m.target as Element).hasAttribute(FRAGMENT_ATTRIBUTE)) ||
         (m.target.nodeType === ELEMENT_NODE && (m.target as Element).hasAttribute(FIELD_ATTRIBUTE))
       ) {
         return true;
@@ -181,6 +185,8 @@ function containsTrackedElement(node: Node): boolean {
   if (node.nodeType !== ELEMENT_NODE) return false;
   const element = node as Element;
   return (
-    element.hasAttribute(FIELD_ATTRIBUTE) || element.querySelector(`[${FIELD_ATTRIBUTE}]`) !== null
+    element.hasAttribute(FIELD_ATTRIBUTE) ||
+    element.hasAttribute(FRAGMENT_ATTRIBUTE) ||
+    element.querySelector(`[${FIELD_ATTRIBUTE}],[${FRAGMENT_ATTRIBUTE}]`) !== null
   );
 }

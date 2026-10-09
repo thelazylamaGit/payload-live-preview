@@ -17,9 +17,9 @@
     "vitest.stryker.config.ts"
   ],
   "totals": {
-    "files": 337,
-    "suites": 723,
-    "tests": 3059,
+    "files": 338,
+    "suites": 724,
+    "tests": 3072,
     "benchmarks": 12
   },
   "groups": {
@@ -60,9 +60,9 @@
       "benchmarks": 0
     },
     "unit": {
-      "files": 278,
-      "suites": 647,
-      "tests": 2826,
+      "files": 279,
+      "suites": 648,
+      "tests": 2839,
       "benchmarks": 0
     }
   },
@@ -862,7 +862,7 @@
       "path": "tests/unit/core/cache.test.ts",
       "group": "unit",
       "suites": 5,
-      "tests": 37,
+      "tests": 38,
       "benchmarks": 0
     },
     {
@@ -940,6 +940,13 @@
       "group": "unit",
       "suites": 1,
       "tests": 4,
+      "benchmarks": 0
+    },
+    {
+      "path": "tests/unit/core/fragment-children.test.ts",
+      "group": "unit",
+      "suites": 1,
+      "tests": 11,
       "benchmarks": 0
     },
     {
@@ -1716,7 +1723,7 @@
       "path": "tests/unit/fragment/client.test.ts",
       "group": "unit",
       "suites": 3,
-      "tests": 14,
+      "tests": 15,
       "benchmarks": 0
     },
     {

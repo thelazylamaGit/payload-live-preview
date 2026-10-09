@@ -9,7 +9,7 @@ import { reportUnboundChange } from './fidelity';
 import { bindingValue } from './field-value';
 import { isBindingInScope, messageOwnerKeys, readDocumentId } from './binding-owner';
 import { resolveBindingOwner } from './cache';
-import { canPatchFragment } from './fragment-patches';
+import { canPatchFragment, planBoundaries } from './fragment-patches';
 import { morphElement } from './morph';
 import type { RuntimeDeps, RuntimeState, UpdateTransaction } from './runtime-state';
 import type { FragmentContext, FragmentStrategy, RouteOutcome, RouteStrategy } from './strategies';
@@ -67,8 +67,27 @@ export class StrategyRunner {
         }),
       );
     };
+    const precise =
+      this.deps.cache.hasNestedFragments &&
+      transaction !== undefined &&
+      !transaction.baseline &&
+      !transaction.forceRender &&
+      transaction.replayFragments !== true;
+    const paths = precise
+      ? new Set([...(transaction.changedPaths ?? []), ...transaction.invalidated])
+      : undefined;
+    if (paths !== undefined) {
+      for (const field of touched) {
+        if (![...paths].some((path) => path === field || path.startsWith(field + '.'))) {
+          paths.add(field);
+        }
+      }
+    }
     const planned = strategy
-      .plan(this.deps.root, touched)
+      .plan(this.deps.root, touched, {
+        boundaries: this.deps.cache.fragments,
+        ...(paths === undefined ? {} : { paths }),
+      })
       .filter(inScope)
       .filter(
         (boundary) =>
@@ -89,10 +108,11 @@ export class StrategyRunner {
         planned.push(boundary);
       }
     }
-    for (const boundary of planned) {
+    const plan = planBoundaries(strategy, planned);
+    for (const boundary of plan.boundaries) {
       this.state.fragmentRenderOwed.add(boundary);
     }
-    return planBoundaries(strategy, planned);
+    return plan;
   }
 
   /**
@@ -233,14 +253,24 @@ export class StrategyRunner {
       morph: (boundary, html) => {
         morphFragment(boundary, html);
         // Indexed patch bindings must follow the server's new order immediately.
-        if (boundary.hasAttribute('data-payload-patch-fields')) this.host.rebuildCache();
+        if (
+          this.deps.cache.hasNestedFragments ||
+          boundary.hasAttribute('data-payload-patch-fields') ||
+          boundary.querySelector('[data-payload-fragment]') !== null
+        ) {
+          this.host.rebuildCache();
+        }
       },
       patch: (boundary) => {
         this.patchFallback(transaction, data, boundary);
       },
       rendered: (element, id, key) => {
         if (isCurrent()) {
-          this.state.fragmentRenderOwed.delete(element);
+          for (const owed of this.state.fragmentRenderOwed) {
+            if (owed === element || element.contains(owed) || !deps.root.contains(owed)) {
+              this.state.fragmentRenderOwed.delete(owed);
+            }
+          }
           transaction.fragmentFailures?.delete(element);
         }
         transaction.pendingFragments -= 1;
@@ -293,7 +323,11 @@ export class StrategyRunner {
     // callbacks. A partial report cannot tell us which remaining boundary won.
     if (report.rendered === plan.boundaries.length) {
       for (const boundary of plan.boundaries) {
-        state.fragmentRenderOwed.delete(boundary);
+        for (const owed of state.fragmentRenderOwed) {
+          if (owed === boundary || boundary.contains(owed) || !deps.root.contains(owed)) {
+            state.fragmentRenderOwed.delete(owed);
+          }
+        }
         transaction.fragmentFailures?.delete(boundary);
       }
     }
@@ -513,7 +547,7 @@ export class StrategyRunner {
   ): void {
     for (const [fieldName, bindings] of this.deps.cache.entries()) {
       for (const target of bindings) {
-        if (target.fragmentBoundary !== boundary) continue;
+        if (target.fragmentBoundary !== boundary && !boundary.contains(target.element)) continue;
         const value = bindingValue(data.fields, target, fieldName, transaction.locale);
         if (value === undefined) continue;
         this.deps.scheduler.schedule({
@@ -537,19 +571,6 @@ function coveringBoundaries(targets: readonly CachedElement[]): Element[] | unde
     if (!boundaries.includes(boundary)) boundaries.push(boundary);
   }
   return boundaries;
-}
-
-/** A plan over boundaries already chosen, whichever question chose them. */
-function planBoundaries(strategy: FragmentStrategy, boundaries: readonly Element[]): FragmentPlan {
-  const covered = new Set(boundaries);
-  return {
-    boundaries,
-    strategy,
-    covers: (target) =>
-      target.fragmentBoundary !== undefined &&
-      (covered.has(target.fragmentBoundary) ||
-        boundaries.some((boundary) => boundary.contains(target.element))),
-  };
 }
 
 /** Morph server-rendered HTML into the boundary, keeping focus and visitor state. */

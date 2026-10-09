@@ -24,6 +24,9 @@ const EXPECTED_BINDING_ATTRIBUTES = [
   'data-payload-strategy',
   'data-payload-boundary',
   'type',
+  'data-payload-fragment',
+  'data-payload-fragment-key',
+  'data-payload-patch-fields',
 ] as const;
 
 describe('ObserverManager — mutations', () => {

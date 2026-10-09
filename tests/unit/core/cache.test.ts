@@ -14,6 +14,26 @@ function makeHtml(html: string): Element {
 }
 
 describe('ElementCache — buildFromRoot', () => {
+  it('collects empty fragment anchors without passing them to a binding filter', () => {
+    const root = makeHtml(
+      '<section data-payload-fragment="list"><article data-payload-fragment="block"><h2 data-payload-field="title">Title</h2></article></section>',
+    );
+    const filtered: Element[] = [];
+    const cache = new ElementCache({
+      filter: (element) => {
+        filtered.push(element);
+        return true;
+      },
+    });
+    expect(cache.buildFromRoot(root).elementCount).toBe(1);
+    expect(filtered).toEqual([root.querySelector('h2')]);
+    expect(cache.fragments).toHaveLength(2);
+    expect(cache.hasNestedFragments).toBe(true);
+    cache.clear();
+    expect(cache.fragments).toEqual([]);
+    expect(cache.hasNestedFragments).toBe(false);
+  });
+
   it('indexes elements by their data-payload-field attribute', () => {
     const root = makeHtml(`
       <h1 data-payload-field="title">A</h1>
