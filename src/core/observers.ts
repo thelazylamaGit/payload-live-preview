@@ -5,6 +5,7 @@
  * scheduler so tests can run without the browser observer APIs.
  */
 
+import { FRAGMENT_ATTRIBUTE } from './strategies';
 import { BINDING_ATTRIBUTES, FIELD_ATTRIBUTE, OWNER_ATTRIBUTE } from './cache';
 
 export interface ObserverCallbacks {
@@ -164,9 +165,12 @@ function hasStructuralImpact(mutations: readonly MutationRecord[]): boolean {
       // The field and owner attributes matter anywhere; other metadata (notably
       // the native `type`) only on an element that is a binding.
       if (
+        m.attributeName === FRAGMENT_ATTRIBUTE ||
         m.attributeName === FIELD_ATTRIBUTE ||
         m.attributeName === OWNER_ATTRIBUTE ||
-        (m.target.nodeType === ELEMENT_NODE && (m.target as Element).hasAttribute(FIELD_ATTRIBUTE))
+        (m.target.nodeType === ELEMENT_NODE &&
+          ((m.target as Element).hasAttribute(FIELD_ATTRIBUTE) ||
+            (m.target as Element).hasAttribute(FRAGMENT_ATTRIBUTE)))
       ) {
         return true;
       }
@@ -181,6 +185,8 @@ function containsTrackedElement(node: Node): boolean {
   if (node.nodeType !== ELEMENT_NODE) return false;
   const element = node as Element;
   return (
-    element.hasAttribute(FIELD_ATTRIBUTE) || element.querySelector(`[${FIELD_ATTRIBUTE}]`) !== null
+    element.hasAttribute(FIELD_ATTRIBUTE) ||
+    element.hasAttribute(FRAGMENT_ATTRIBUTE) ||
+    element.querySelector(`[${FIELD_ATTRIBUTE}],[${FRAGMENT_ATTRIBUTE}]`) !== null
   );
 }

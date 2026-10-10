@@ -1,3 +1,4 @@
+// 2026-10-11 nested keyed targeting: measured incremental growth; existing margins retained.
 // 2026-10-11 generic CSS with manual patch permissions: measured HEAD deltas, existing cushions retained.
 /**
  * 2026-10-10: per-boundary fragment coalescing; ceilings cover paired build growth and existing baseline excess.
@@ -100,7 +101,7 @@
 // 2026-09-19 (the sanitizer empties `is`): raw 92_392 → 92_433 (+41 B), gzip 29_229 → 29_238 (+9 B), brotli 25_951 → 25_968 (+17 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, the one line a field with no binding gets. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: the sanitizer document named per call): raw 92_433 → 92_496 (+63 B), gzip 29_238 → 29_261 (+23 B), brotli 25_968 → 25_991 (+23 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, the one line a field with no binding gets. The log in bundle-budgets.ts has the whole change.
 // 2026-09-19 (2.1: one scope per runtime session): raw 92_496 → 93_010 (+514 B), gzip 29_261 → 29_456 (+195 B), brotli 25_991 → 26_162 (+171 B) — the measured difference against a build of this tree without the change, cushions kept; the LP0201/LP0203 split, the one line a field with no binding gets. The log in bundle-budgets.ts has the whole change.
-export const INLINE_LEAN_BUDGET = { raw: 98483, gzip: 31304, brotli: 27763 } as const;
+export const INLINE_LEAN_BUDGET = { raw: 98728, gzip: 31373, brotli: 27778 } as const;
 
 // 2026-10-08: explicit fragment patch fields, precise path fingerprints, the safe
 // hex-colour renderer, pending-render debt and revision-aware burst scheduling.

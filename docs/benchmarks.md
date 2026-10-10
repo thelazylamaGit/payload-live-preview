@@ -222,3 +222,41 @@ suites were not repeated. Typecheck, lint, bundle and architecture checks are
 also reported separately. The earlier Windows timer/symlink issues remain
 outside this change. API regeneration still exposes the same replay-store link
 warnings and forgotten-export baseline mismatch seen in the untouched fork.
+
+## Nested keyed fragments: incremental measurement
+
+This step builds on the completed generic CSS/manual permission version above.
+It reuses that boundary cache, precise path diff, keyed morph and per-boundary
+work scheduler. It adds no exported names or source modules; API declaration
+counts remain 552 public and 127 internal across 257 source modules.
+
+| Inline profile | Before gzip | After gzip | Increment |
+| -------------- | ----------: | ---------: | --------: |
+| Default        |    41,326 B |   41,745 B |     419 B |
+| Lean           |    31,292 B |   31,361 B |      69 B |
+| With route     |    43,512 B |   43,955 B |     443 B |
+| With fragments |    45,092 B |   45,820 B |     728 B |
+
+The fragment-enabled profile grows by 2,334 raw bytes and 679 Brotli bytes.
+The lean increment comes from shared cache accessors and observed boundary
+attributes; it does not include fragment targeting. Bundle ceilings retain
+their existing margins over these paired measurements, using the same
+SOURCE_DATE_EPOCH and repository build and compression scripts.
+
+The one-worker benchmark in `tests/benchmarks/nested-fragments.bench.ts`
+measured cached planning for one content edit at about 0.0009 ms with 10
+children and 0.0044 ms with 100 children (1.16 million and 225 thousand calls
+per second). It excludes cache construction, precise diffing, DOM morphing,
+network requests and browser paint. Nested pages need precise diffing even
+without patch permissions; the existing detailed diff measurements above
+show why planning time alone is not an end-to-end overhead measurement.
+Ordinary boundaries do not enable detailed diffing solely for this feature.
+
+Focused validation covered 176 tests across 12 files using one worker:
+child targeting and fallbacks, parent/child races, sibling independence and
+widget state, initially empty lists, direct bindings, Lexical leaves, recovery,
+cache refresh, observers and scheduler replay/deadlines. The full suite and
+browser benchmarks were not rerun. Typecheck, lint, architecture and bundle
+gates passed. Generated API reports retain the pre-existing replay-store link
+warnings and forgotten-export baseline mismatch (50 reviewed versus 181 actual);
+this step adds no new API warning debt.

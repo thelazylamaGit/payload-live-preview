@@ -442,7 +442,16 @@ export interface FragmentReport {
 
 // @public
 export interface FragmentStrategy {
-    readonly plan: (root: ParentNode, changedFields: ReadonlySet<string>) => readonly Element[];
+    readonly plan: (root: ParentNode, changedFields: ReadonlySet<string>, options?: {
+        readonly paths?: ReadonlySet<string>;
+        readonly boundaries: ReadonlyMap<Element, {
+            readonly id: string;
+            readonly key: string | undefined;
+            readonly dependencies: readonly string[];
+            readonly children: readonly Element[];
+            readonly delegatable: boolean;
+        }>;
+    }) => readonly Element[];
     readonly render: (context: FragmentContext, boundaries: readonly Element[]) => Promise<FragmentReport>;
 }
 

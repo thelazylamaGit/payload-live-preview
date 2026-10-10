@@ -45,6 +45,45 @@ answer — is
 A boundary inside an island (`<astro-island>`, `data-payload-island`) is the
 island's business and is never rendered by the server.
 
+## Nested keyed boundaries
+
+Use the existing `boundary()` helper to mark a list and its children:
+
+```astro
+<section {...preview.boundary('page-blocks', { dependsOn: ['blocks'] })}>
+  {blocks.map((block, index) => (
+    <article {...preview.boundary('block', {
+      key: block.id,
+      dependsOn: [`blocks.${index}`],
+    })} data-payload-key={block.id}>
+      <Block block={block} />
+    </article>
+  ))}
+</section>
+```
+
+Content edits render the smallest covering keyed child. Each child key must be
+unique among its immediate fragment siblings, its document owner must match its
+parent, and its dependencies must be narrower than the parent's relevant
+dependencies. Missing or duplicate keys, mismatched owners, broad dependencies,
+or a change not covered by children retain the parent render. Declare a specific
+parent dependency such as `blocks.0.title` if that field also affects parent markup;
+the broader `blocks` declaration allows delegation to children.
+
+Insertion, removal, reordering and block type changes render the containing list.
+Parent work suppresses descendant requests and direct binding writes until it
+settles. List morphs refresh indexed bindings and child dependencies, including
+when an empty list first gains children. Unchanged siblings keep their existing
+DOM nodes and widget state when another child renders.
+
+The current scheduler still coalesces edits per boundary: an active request and
+one trailing render with the latest values, rather than restarting on every edit.
+Independent siblings can finish separately. A response superseded by parent work
+cannot overwrite a newer list. Nested targeting does not grant direct patch
+permissions; `patchFields` and binding declarations retain their existing meaning.
+The endpoint's registry must handle both list and child ids and resolve a child's
+key against the submitted fields; keys never select code or templates.
+
 ## The endpoint
 
 One endpoint, one binding per component system. What differs is the import, the

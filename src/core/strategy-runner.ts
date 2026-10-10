@@ -85,8 +85,27 @@ export class StrategyRunner {
         }),
       );
     };
+    const precise =
+      this.deps.cache.hasNestedFragments &&
+      transaction !== undefined &&
+      !transaction.baseline &&
+      !transaction.forceRender &&
+      transaction.replayFragments !== true;
+    const paths = precise
+      ? new Set([...(transaction.changedPaths ?? []), ...transaction.invalidated])
+      : undefined;
+    if (paths !== undefined) {
+      for (const field of touched) {
+        if (![...paths].some((path) => path === field || path.startsWith(field + '.'))) {
+          paths.add(field);
+        }
+      }
+    }
     const planned = strategy
-      .plan(this.deps.root, touched)
+      .plan(this.deps.root, touched, {
+        boundaries: this.deps.cache.fragmentBoundaries,
+        ...(paths === undefined ? {} : { paths }),
+      })
       .filter(inScope)
       .filter(
         (boundary) =>
@@ -109,10 +128,9 @@ export class StrategyRunner {
         planned.push(boundary);
       }
     }
-    for (const boundary of planned) {
-      this.state.fragmentRenderOwed.add(boundary);
-    }
-    return planBoundaries(strategy, planned);
+    const plan = planBoundaries(strategy, planned);
+    for (const boundary of plan.boundaries) this.state.fragmentRenderOwed.add(boundary);
+    return plan;
   }
 
   /**
@@ -393,7 +411,10 @@ export class StrategyRunner {
   ): void {
     for (const [fieldName, bindings] of this.deps.cache.entries()) {
       for (const target of bindings) {
-        if (target.fragmentBoundary !== boundary) continue;
+        if (!boundary.contains(target.element)) continue;
+        if (this.deps.scopeBindingsByOwner && target.owner !== resolveBindingOwner(boundary)) {
+          continue;
+        }
         const value = bindingValue(data.fields, target, fieldName, transaction.locale);
         if (value === undefined && target.cssBinding === undefined) continue;
         this.deps.scheduler.schedule({
@@ -421,6 +442,9 @@ function coveringBoundaries(targets: readonly CachedElement[]): Element[] | unde
 
 /** A plan over boundaries already chosen, whichever question chose them. */
 function planBoundaries(strategy: FragmentStrategy, boundaries: readonly Element[]): FragmentPlan {
+  boundaries = boundaries.filter(
+    (element) => !boundaries.some((parent) => parent !== element && parent.contains(element)),
+  );
   const covered = new Set(boundaries);
   return {
     boundaries,

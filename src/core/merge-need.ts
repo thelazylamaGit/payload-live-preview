@@ -108,18 +108,25 @@ export class MergeNeed {
     const paths = optIn ? new Set([...rawPaths, ...invalidated]) : rawPaths;
     const candidates =
       optIn && deps.strategies.fragment !== undefined
-        ? deps.strategies.fragment.plan(deps.root, new Set([...changed, ...invalidated])).filter(
-            (boundary) =>
-              !deps.scopeBindingsByOwner ||
-              isBindingInScope(
-                deps.cache.boundaryMetadata(boundary)?.owner,
-                messageOwnerKeys({
-                  globalSlug: transaction.message.globalSlug,
-                  collectionSlug: transaction.message.collectionSlug,
-                  documentId: readDocumentId(raw),
-                }),
-              ),
-          )
+        ? deps.strategies.fragment
+            .plan(deps.root, new Set([...changed, ...invalidated]), {
+              boundaries: deps.cache.fragmentBoundaries,
+              ...(deps.cache.hasNestedFragments && !baseline && !transaction.forceRender
+                ? { paths }
+                : {}),
+            })
+            .filter(
+              (boundary) =>
+                !deps.scopeBindingsByOwner ||
+                isBindingInScope(
+                  deps.cache.boundaryMetadata(boundary)?.owner,
+                  messageOwnerKeys({
+                    globalSlug: transaction.message.globalSlug,
+                    collectionSlug: transaction.message.collectionSlug,
+                    documentId: readDocumentId(raw),
+                  }),
+                ),
+            )
         : undefined;
     if (
       optIn &&

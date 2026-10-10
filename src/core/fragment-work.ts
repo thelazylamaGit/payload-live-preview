@@ -256,10 +256,20 @@ export class FragmentWorkRunner {
     }
     morphElement(boundary, rendered, { keyAttributes: [KEY_ATTRIBUTE] });
     if (
+      this.deps.cache.hasNestedFragments ||
       boundary.hasAttribute('data-payload-patch-fields') ||
       boundary.querySelector('[data-payload-fragment]') !== null
     ) {
       this.host.rebuildCache();
+      // An initially empty list had no nested paths to track. Prime the existing
+      // diff when its first children arrive, so the next edit can target one.
+      if (
+        this.deps.cache.hasNestedFragments &&
+        !this.state.changes.trackingPaths &&
+        this.state.activeUpdate === work.transaction
+      ) {
+        this.state.changes.diff(work.data.fields, {}, true);
+      }
     }
     return this.current(work);
   }

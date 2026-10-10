@@ -47,6 +47,8 @@ export const INPUT_TYPE_ATTRIBUTE = 'type';
  */
 export const BINDING_ATTRIBUTES: readonly string[] = [
   FIELD_ATTRIBUTE,
+  FRAGMENT_ATTRIBUTE,
+  'data-payload-fragment-key',
   'data-payload-css-property',
   'data-payload-css-fallback',
   'data-payload-css-format',
@@ -127,44 +129,53 @@ export interface ElementCacheOptions {
   readonly filter?: ElementPredicate;
 }
 
-/**
- * Elements share a field name when the same field is rendered in several
- * places; within a field the order is DOM order.
- */
+/** Boundary declarations and nesting resolved by the existing binding cache. @internal */
+export interface FragmentBoundaryMetadata {
+  readonly id: string;
+  readonly key: string | undefined;
+  readonly patchFields: readonly string[];
+  readonly dependencies: readonly string[];
+  readonly owner: string | undefined;
+  readonly children: Element[];
+  delegatable: boolean;
+}
+
+/** Elements share field buckets; entries within each field follow DOM order. */
 export class ElementCache {
   private readonly entriesByField = new Map<string, CachedElement[]>();
   private entryByElement = new WeakMap<Element, CachedElement[]>();
   private readonly filter: ElementPredicate;
   private count = 0;
   private patchPermissions = false;
-  private readonly boundaries = new Map<
-    Element,
-    {
-      readonly patchFields: readonly string[];
-      readonly dependencies: readonly string[];
-      readonly owner?: string;
-    }
-  >();
-  boundaryMetadata(element: Element):
-    | {
-        readonly patchFields: readonly string[];
-        readonly dependencies: readonly string[];
-        readonly owner?: string;
-      }
-    | undefined {
+  private readonly boundaries = new Map<Element, FragmentBoundaryMetadata>();
+  private nestedFragments = false;
+  get fragmentBoundaries(): ReadonlyMap<Element, FragmentBoundaryMetadata> {
+    return this.boundaries;
+  }
+  get hasNestedFragments(): boolean {
+    return this.nestedFragments;
+  }
+  boundaryMetadata(element: Element): FragmentBoundaryMetadata | undefined {
     return this.boundaries.get(element);
   }
   private indexBoundary(element: Element): void {
     if ((typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__) || isInsideIsland(element)) {
       return;
     }
+    const id = element.getAttribute(FRAGMENT_ATTRIBUTE);
+    if (id === null || id.length === 0) return;
     const patchFields = parseDependencyList(element.getAttribute('data-payload-patch-fields'));
     if (patchFields.length > 0) this.patchPermissions = true;
     const owner = resolveBindingOwner(element);
+    const key = element.getAttribute('data-payload-fragment-key');
     this.boundaries.set(element, {
+      id,
+      key: key === null || key.length === 0 ? undefined : key,
+      children: [],
+      delegatable: false,
       patchFields,
       dependencies: parseDependencyList(element.getAttribute(DEPENDS_ATTRIBUTE)),
-      ...(owner === undefined ? {} : { owner }),
+      owner,
     });
   }
   get hasPatchFields(): boolean {
@@ -213,6 +224,34 @@ export class ElementCache {
       if (includeFragments && element.hasAttribute(FRAGMENT_ATTRIBUTE)) this.indexBoundary(element);
       if (element.hasAttribute(FIELD_ATTRIBUTE) && this.add(element) !== undefined) {
         elementCount += 1;
+      }
+    }
+    if (includeFragments) {
+      // Resolve nesting and sibling identities once, alongside binding indexing.
+      for (const [element] of this.boundaries) {
+        if ('contains' in root && !(root as Node).contains(element)) {
+          this.boundaries.delete(element);
+          continue;
+        }
+        const parent = element.parentElement?.closest('[' + FRAGMENT_ATTRIBUTE + ']');
+        if (parent != null && this.boundaries.has(parent)) {
+          this.boundaries.get(parent)?.children.push(element);
+          this.nestedFragments = true;
+        }
+      }
+      for (const parent of this.boundaries.values()) {
+        const counts = new Map<string, number>();
+        for (const element of parent.children) {
+          const child = this.boundaries.get(element);
+          if (child === undefined) continue;
+          if (child.key !== undefined) counts.set(child.key, (counts.get(child.key) ?? 0) + 1);
+        }
+        for (const element of parent.children) {
+          const child = this.boundaries.get(element);
+          if (child === undefined) continue;
+          child.delegatable =
+            child.key !== undefined && counts.get(child.key) === 1 && child.owner === parent.owner;
+        }
       }
     }
     this.islandRoots = collectIslands(root);
@@ -294,6 +333,7 @@ export class ElementCache {
     this.entryByElement = new WeakMap();
     this.count = 0;
     this.boundaries.clear();
+    this.nestedFragments = false;
     this.patchPermissions = false;
     this.dependencies = null;
     this.islandRoots = [];

@@ -3,6 +3,7 @@
 import type { DiagnosticCode } from '@core/diagnostic-codes';
 import { isInsideIsland } from '@core/islands';
 import { parseDependencyList } from '@core/dependencies';
+import type { FragmentStrategy } from '@core/strategies';
 import { FRAGMENT_ATTRIBUTE } from '@core/strategies';
 
 /** Distinguishes several boundaries of one registry id; unique among siblings. @internal */
@@ -65,18 +66,72 @@ export function describeBoundary(element: Element): FragmentBoundary | null {
 export function collectFragmentBoundaries(
   root: ParentNode,
   changedFields: ReadonlySet<string>,
+  options?: Parameters<FragmentStrategy['plan']>[2],
 ): readonly FragmentBoundary[] {
   const boundaries: FragmentBoundary[] = [];
-  for (const element of root.querySelectorAll(`[${FRAGMENT_ATTRIBUTE}]`)) {
-    const boundary = describeBoundary(element);
-    if (boundary === null || isInsideIsland(element)) continue;
+  const indexed = options?.boundaries;
+  const elements = indexed?.keys() ?? root.querySelectorAll('[' + FRAGMENT_ATTRIBUTE + ']');
+  for (const element of elements) {
+    const metadata = indexed?.get(element);
+    const boundary =
+      metadata === undefined
+        ? describeBoundary(element)
+        : {
+            element,
+            id: metadata.id,
+            key: metadata.key,
+            dependsOn: metadata.dependencies,
+          };
     if (
-      boundary.dependsOn.length > 0 &&
-      !boundary.dependsOn.some((field) => changedFields.has(field))
+      boundary === null ||
+      boundary.id.length === 0 ||
+      (indexed === undefined && isInsideIsland(element))
+    ) {
+      continue;
+    }
+    const paths = options?.paths;
+    if (paths === undefined) {
+      if (
+        boundary.dependsOn.length === 0 ||
+        boundary.dependsOn.some((field) => changedFields.has(field))
+      ) {
+        boundaries.push(boundary);
+      }
+      continue;
+    }
+    const relevant = [...paths].filter(
+      (path) =>
+        boundary.dependsOn.length === 0 ||
+        boundary.dependsOn.some((field) => below(path, field) || below(field, path)),
+    );
+    if (relevant.length === 0) continue;
+    // Delegate content only to a unique, same-owner child with narrower dependencies.
+    // A container change above a child's dependency always stays with the parent.
+    if (
+      metadata !== undefined &&
+      relevant.every((path) =>
+        metadata.children.some((element) => {
+          const child = indexed?.get(element);
+          return (
+            child?.delegatable === true &&
+            child.dependencies.some(
+              (field) =>
+                below(path, field) &&
+                boundary.dependsOn
+                  .filter((parent) => below(path, parent) || below(parent, path))
+                  .every((parent) => field.startsWith(parent + '.')),
+            )
+          );
+        }),
+      )
     ) {
       continue;
     }
     boundaries.push(boundary);
   }
   return boundaries;
+}
+
+function below(path: string, field: string): boolean {
+  return path === field || path.startsWith(field + '.');
 }

@@ -197,7 +197,14 @@ export class UpdatePipeline {
     const { deps, state } = this;
     transaction.latestData = data;
     const dependencies = mergeDependencyMaps(deps.dependencies, deps.cache.dependencyMap());
-    const changes = state.changes.diff(data.fields, dependencies, deps.cache.hasPatchFields);
+    const changes = state.changes.diff(
+      data.fields,
+      dependencies,
+      !(typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__) &&
+        (deps.cache.hasPatchFields ||
+          deps.cache.hasNestedFragments ||
+          (deps.cache.fragmentBoundaries.size > 0 && state.changes.trackingPaths)),
+    );
     if (changes.baseline && !refined && deps.autoBind !== 'off') {
       // Once, on the message that describes what the server rendered (ADR 0014
       // §1). The lean profile leaves the search out; esbuild folds the branch.

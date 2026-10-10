@@ -5,7 +5,7 @@
 ```ts
 
 // @internal
-export function collectFragmentBoundaries(root: ParentNode, changedFields: ReadonlySet<string>): readonly FragmentBoundary[];
+export function collectFragmentBoundaries(root: ParentNode, changedFields: ReadonlySet<string>, options?: Parameters<FragmentStrategy['plan']>[2]): readonly FragmentBoundary[];
 
 // @internal (undocumented)
 export function createFragmentHandler(options: FragmentStrategyOptions): FragmentHandler;
@@ -183,7 +183,16 @@ export interface FragmentResponseBody {
 
 // @public
 export interface FragmentStrategy {
-    readonly plan: (root: ParentNode, changedFields: ReadonlySet<string>) => readonly Element[];
+    readonly plan: (root: ParentNode, changedFields: ReadonlySet<string>, options?: {
+        readonly paths?: ReadonlySet<string>;
+        readonly boundaries: ReadonlyMap<Element, {
+            readonly id: string;
+            readonly key: string | undefined;
+            readonly dependencies: readonly string[];
+            readonly children: readonly Element[];
+            readonly delegatable: boolean;
+        }>;
+    }) => readonly Element[];
     readonly render: (context: FragmentContext, boundaries: readonly Element[]) => Promise<FragmentReport>;
 }
 

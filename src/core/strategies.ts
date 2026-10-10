@@ -58,7 +58,23 @@ export interface FragmentReport {
 /** A fragment strategy: which boundaries it owns for a revision, and how it renders them. */
 export interface FragmentStrategy {
   /** The boundaries this update re-renders; their inner bindings are left to the strategy. */
-  readonly plan: (root: ParentNode, changedFields: ReadonlySet<string>) => readonly Element[];
+  readonly plan: (
+    root: ParentNode,
+    changedFields: ReadonlySet<string>,
+    options?: {
+      readonly paths?: ReadonlySet<string>;
+      readonly boundaries: ReadonlyMap<
+        Element,
+        {
+          readonly id: string;
+          readonly key: string | undefined;
+          readonly dependencies: readonly string[];
+          readonly children: readonly Element[];
+          readonly delegatable: boolean;
+        }
+      >;
+    },
+  ) => readonly Element[];
   /** Render the planned boundaries; resolves once every one settled. */
   readonly render: (
     context: FragmentContext,

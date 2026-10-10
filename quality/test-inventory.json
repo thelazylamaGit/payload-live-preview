@@ -17,17 +17,17 @@
     "vitest.stryker.config.ts"
   ],
   "totals": {
-    "files": 339,
-    "suites": 726,
-    "tests": 3077,
-    "benchmarks": 18
+    "files": 341,
+    "suites": 728,
+    "tests": 3090,
+    "benchmarks": 20
   },
   "groups": {
     "benchmarks": {
-      "files": 4,
-      "suites": 11,
+      "files": 5,
+      "suites": 12,
       "tests": 0,
-      "benchmarks": 18
+      "benchmarks": 20
     },
     "browser-bench": {
       "files": 1,
@@ -60,9 +60,9 @@
       "benchmarks": 0
     },
     "unit": {
-      "files": 279,
-      "suites": 649,
-      "tests": 2844,
+      "files": 280,
+      "suites": 650,
+      "tests": 2857,
       "benchmarks": 0
     }
   },
@@ -80,6 +80,13 @@
       "suites": 8,
       "tests": 0,
       "benchmarks": 10
+    },
+    {
+      "path": "tests/benchmarks/nested-fragments.bench.ts",
+      "group": "benchmarks",
+      "suites": 1,
+      "tests": 0,
+      "benchmarks": 2
     },
     {
       "path": "tests/benchmarks/revision-pipeline.bench.ts",
@@ -957,6 +964,13 @@
       "benchmarks": 0
     },
     {
+      "path": "tests/unit/core/fragment-children.test.ts",
+      "group": "unit",
+      "suites": 1,
+      "tests": 11,
+      "benchmarks": 0
+    },
+    {
       "path": "tests/unit/core/fragment-depth-fallback.test.ts",
       "group": "unit",
       "suites": 1,
@@ -1289,7 +1303,7 @@
       "path": "tests/unit/core/observers-mutations.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 12,
+      "tests": 14,
       "benchmarks": 0
     },
     {

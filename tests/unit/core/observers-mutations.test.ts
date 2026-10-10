@@ -7,6 +7,8 @@ import { flushMutations } from './observers-harness';
 // policy resolves it statically.
 const EXPECTED_BINDING_ATTRIBUTES = [
   'data-payload-field',
+  'data-payload-fragment',
+  'data-payload-fragment-key',
   'data-payload-css-property',
   'data-payload-css-fallback',
   'data-payload-css-format',
@@ -57,6 +59,42 @@ describe('ObserverManager — mutations', () => {
       observer.stop();
     },
   );
+  it.each(['data-payload-fragment-key', 'data-payload-depends', 'data-payload-patch-fields'])(
+    'rebuilds for fragment-only metadata %s',
+    async (attribute) => {
+      document.body.innerHTML = '<section data-payload-fragment="list"></section>';
+      const onStructuralChange = vi.fn();
+      const observer = new ObserverManager(
+        { onStructuralChange, onVisibilityChange: () => {} },
+        { mutationDebounceMs: 10 },
+      );
+      observer.start(document.body);
+      document.querySelector('section')!.setAttribute(attribute, 'changed');
+      await flushMutations();
+      vi.advanceTimersByTime(10);
+      expect(onStructuralChange).toHaveBeenCalledOnce();
+      observer.stop();
+    },
+  );
+  it('rebuilds when a fragment without bindings appears and disappears', async () => {
+    const onStructuralChange = vi.fn();
+    const observer = new ObserverManager(
+      { onStructuralChange, onVisibilityChange: () => {} },
+      { mutationDebounceMs: 10 },
+    );
+    observer.start(document.body);
+    const boundary = document.createElement('section');
+    boundary.setAttribute('data-payload-fragment', 'list');
+    document.body.append(boundary);
+    await flushMutations();
+    vi.advanceTimersByTime(10);
+    expect(onStructuralChange).toHaveBeenCalledOnce();
+    boundary.remove();
+    await flushMutations();
+    vi.advanceTimersByTime(10);
+    expect(onStructuralChange).toHaveBeenCalledTimes(2);
+    observer.stop();
+  });
   it('ignores a native type change on an unbound element', async () => {
     const root = document.body;
     const unbound = document.createElement('input');
