@@ -7,6 +7,11 @@ import { flushMutations } from './observers-harness';
 // policy resolves it statically.
 const EXPECTED_BINDING_ATTRIBUTES = [
   'data-payload-field',
+  'data-payload-css-property',
+  'data-payload-css-fallback',
+  'data-payload-css-format',
+  'data-payload-bindings',
+  'data-payload-patch-fields',
   'data-payload-type',
   'data-payload-attribute',
   'data-payload-href',

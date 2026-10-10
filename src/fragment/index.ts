@@ -98,8 +98,7 @@ export function fragmentStrategyFrom(handler: FragmentHandler): FragmentStrategy
             return;
           }
           if (outcome.status === 'rendered') {
-            if (outcome.patchFields === undefined) context.morph(element, outcome.html);
-            else context.morph(element, outcome.html, outcome.patchFields);
+            context.morph(element, outcome.html);
             if (!context.isCurrent()) {
               report.superseded += 1;
               return;

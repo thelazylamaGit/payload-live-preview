@@ -39,7 +39,6 @@ function data() {
 }
 type Data = ReturnType<typeof data>;
 const leaves = (fields: Data) => fields.blocks[0]!.content.root.children[0]!.children;
-const permissions = `${path(0)},${path(1)},blocks.0.colour`;
 function html(fields: Data): string {
   return (
     leaves(fields)
@@ -48,14 +47,13 @@ function html(fields: Data): string {
           `<span data-server-format="${node.format}" data-payload-field="${path(index)}" data-payload-type="text">${node.text}</span>`,
       )
       .join('') +
-    `<div data-payload-field="blocks.0.colour" data-payload-type="hexColor" data-payload-css-property="background-color" style="background-color:${fields.blocks[0]!.colour}"></div>`
+    `<div data-payload-field="blocks.0.colour" data-payload-css-property="background-color" style="background-color:${fields.blocks[0]!.colour}"></div>`
   );
 }
-function response(body: FragmentRequestBody, patchFields?: readonly string[]): Response {
+function response(body: FragmentRequestBody): Response {
   return new Response(
     JSON.stringify({
       html: html(body.fields as Data),
-      ...(patchFields === undefined ? {} : { patchFields }),
       boundary: { id: body.fragment },
       revision: body.revision,
       metadata: { renderedAt: '2026-10-10T00:00:00Z', renderer: 'test' },
@@ -79,7 +77,7 @@ async function start(
   initial = data(),
   overrides: Partial<ConstructorParameters<typeof LivePreviewRuntime>[0]> = {},
 ) {
-  document.body.innerHTML = `<section data-payload-fragment="rich" data-payload-depends="blocks" ${optIn ? `data-payload-patch-fields="${permissions}"` : ''}>${html(initial)}</section>`;
+  document.body.innerHTML = `<section data-payload-fragment="rich" data-payload-depends="blocks" ${optIn ? `data-payload-patch-fields="blocks.0.content,blocks.0.colour"` : ''}>${html(initial)}</section>`;
   const fetchFragment = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
     (_url, init) =>
       Promise.resolve(response(JSON.parse(init!.body as string) as FragmentRequestBody)),
@@ -204,13 +202,13 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     post(fields);
     await tick();
     expect(fetchFragment).toHaveBeenCalledTimes(1);
-    first.resolve(response(old, []));
+    first.resolve(response(old));
     await tick();
     expect(fetchFragment).toHaveBeenCalledTimes(2);
     expect(document.querySelector('span')!.getAttribute('data-server-format')).toBe('0');
     expect(document.querySelectorAll('span')).toHaveLength(2);
     expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
-      permissions,
+      'blocks.0.content,blocks.0.colour',
     );
     const latest = JSON.parse(
       fetchFragment.mock.calls[1]![1]!.body as string,
@@ -234,23 +232,19 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     post(fields);
     await tick();
     const old = JSON.parse(fetchFragment.mock.calls[0]![1]!.body as string) as FragmentRequestBody;
-    // Permission alone is insufficient until a matching binding is mounted.
-    document
-      .querySelector('section')!
-      .setAttribute('data-payload-patch-fields', permissions + ',' + path(2));
     for (let index = 0; index < 20; index += 1) {
       leaves(fields)[2]!.text = `New ${index}`;
       post(fields);
       await vi.advanceTimersByTimeAsync(10);
     }
     expect(fetchFragment).toHaveBeenCalledTimes(1);
-    first.resolve(response(old, [path(0), path(1), path(2), 'blocks.0.colour']));
+    first.resolve(response(old));
     await tick();
     expect(document.querySelectorAll('span')).toHaveLength(2);
     const latest = JSON.parse(
       fetchFragment.mock.calls[1]![1]!.body as string,
     ) as FragmentRequestBody;
-    second.resolve(response(latest, [path(0), path(1), path(2), 'blocks.0.colour']));
+    second.resolve(response(latest));
     await tick();
     expect(document.querySelectorAll('span')[2]!.textContent).toBe('New 19');
     fetchFragment.mockClear();
@@ -259,36 +253,6 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     await tick();
     expect(fetchFragment).not.toHaveBeenCalled();
     expect(document.querySelectorAll('span')[2]!.textContent).toBe('Direct now');
-  });
-
-  it('rejects a compatible revision when the response removes its permission', async () => {
-    const { fetchFragment } = await start();
-    const first = deferred<Response>();
-    const second = deferred<Response>();
-    fetchFragment
-      .mockImplementationOnce(() => first.promise)
-      .mockImplementationOnce(() => second.promise);
-    const fields = data();
-    leaves(fields)[0]!.format = 1;
-    post(fields);
-    await tick();
-    const old = JSON.parse(fetchFragment.mock.calls[0]![1]!.body as string) as FragmentRequestBody;
-    leaves(fields)[0]!.text = 'Latest';
-    post(fields);
-    await tick();
-    first.resolve(response(old, []));
-    await tick();
-    expect(document.querySelector('span')!.textContent).toBe('One');
-    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
-      permissions,
-    );
-    const latest = JSON.parse(
-      fetchFragment.mock.calls[1]![1]!.body as string,
-    ) as FragmentRequestBody;
-    second.resolve(response(latest, []));
-    await tick();
-    expect(document.querySelector('span')!.textContent).toBe('Latest');
-    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe('');
   });
 
   it('falls back with current values after a delayed failure and retries owed work', async () => {
@@ -325,76 +289,12 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     await tick();
     runtime!.destroy();
     expect(fetchFragment.mock.calls[0]![1]!.signal!.aborted).toBe(true);
-    pending.resolve(response(body, []));
+    pending.resolve(response(body));
     await tick();
     expect(fetchFragment).toHaveBeenCalledTimes(1);
     expect(document.querySelector('span')!.textContent).toBe('One');
     expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
-      permissions,
-    );
-  });
-
-  it('replaces obsolete permissions after a structural render and patches a new leaf directly', async () => {
-    const { fetchFragment, population } = await start();
-    const fields = data();
-    leaves(fields).push(text('Three'));
-    const replacement = [path(0), path(2), 'blocks.0.colour'];
-    fetchFragment.mockImplementationOnce((_url, init) =>
-      Promise.resolve(
-        response(JSON.parse(init!.body as string) as FragmentRequestBody, replacement),
-      ),
-    );
-    post(fields);
-    await tick();
-    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
-      replacement.join(','),
-    );
-    fetchFragment.mockClear();
-    population.mockClear();
-    leaves(fields)[2]!.text = 'New direct leaf';
-    fields.blocks[0]!.colour = '#fff';
-    post(fields);
-    await tick();
-    expect(document.querySelectorAll('span')[2]!.textContent).toBe('New direct leaf');
-    expect(document.querySelector('div')!.style.backgroundColor).toBe('rgb(255, 255, 255)');
-    expect(fetchFragment).not.toHaveBeenCalled();
-    expect(population).not.toHaveBeenCalled();
-    leaves(fields)[1]!.text = 'No longer permitted';
-    post(fields);
-    await tick();
-    expect(fetchFragment).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([undefined, []] as const)(
-    'preserves omitted permissions and clears an empty list (%s)',
-    async (replacement) => {
-      const { fetchFragment } = await start();
-      const fields = data();
-      leaves(fields)[0]!.format = 1;
-      fetchFragment.mockImplementationOnce((_url, init) =>
-        Promise.resolve(
-          response(JSON.parse(init!.body as string) as FragmentRequestBody, replacement),
-        ),
-      );
-      post(fields);
-      await tick();
-      expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
-        replacement === undefined ? permissions : '',
-      );
-    },
-  );
-
-  it('leaves permissions unchanged after a failed response', async () => {
-    const { fetchFragment } = await start();
-    fetchFragment.mockResolvedValueOnce(
-      new Response(JSON.stringify({ patchFields: [] }), { status: 500 }),
-    );
-    const fields = data();
-    leaves(fields)[0]!.format = 1;
-    post(fields);
-    await tick();
-    expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
-      permissions,
+      'blocks.0.content,blocks.0.colour',
     );
   });
   it('renders edits to existing embedded component fields alongside text', async () => {
@@ -485,25 +385,15 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
         nodes[1]!.format = 1;
         break;
     }
-    // Even explicit permission for formatting must not turn it into a text edit.
-    document
-      .querySelector('section')!
-      .setAttribute(
-        'data-payload-patch-fields',
-        permissions + `,${prefix}.0.format,${prefix}.1.format`,
-      );
     post(fields);
     await tick();
     expect(fetchFragment).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['no opt-in', 'not permitted', 'unbound', 'outside boundary'])(
-    'requires exact permission and a matching binding (%s)',
+  it.each(['no opt-in', 'unbound', 'outside boundary'])(
+    'requires opt-in and a matching binding (%s)',
     async (condition) => {
       const { fetchFragment } = await start(condition !== 'no opt-in');
-      if (condition === 'not permitted') {
-        document.querySelector('section')!.setAttribute('data-payload-patch-fields', path(1));
-      }
       if (condition === 'unbound') {
         document.querySelector('span')!.removeAttribute('data-payload-field');
       }
@@ -536,7 +426,7 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     await tick();
     expect(document.querySelector('span')?.textContent).toBe('Latest');
     expect(document.querySelector('section')!.getAttribute('data-payload-patch-fields')).toBe(
-      permissions,
+      'blocks.0.content,blocks.0.colour',
     );
     fetchFragment.mockClear();
     leaves(fields)[0]!.text = 'After fragment';
@@ -546,7 +436,7 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     expect(fetchFragment).not.toHaveBeenCalled();
   });
 
-  it('uses refreshed bindings and requires refreshed exact permissions for inserted leaves', async () => {
+  it('indexes newly rendered bindings for inserted leaves', async () => {
     const { fetchFragment } = await start();
     const fields = data();
     leaves(fields).push(text('Three'));
@@ -554,14 +444,11 @@ describe('direct Lexical text leaves inside an existing fragment', () => {
     await tick();
     expect(fetchFragment).toHaveBeenCalledTimes(1);
     fetchFragment.mockClear();
-    leaves(fields)[2]!.text = 'Unpermitted';
+    leaves(fields)[2]!.text = 'New binding';
     post(fields);
     await tick();
-    expect(fetchFragment).toHaveBeenCalledTimes(1);
+    expect(fetchFragment).not.toHaveBeenCalled();
     fetchFragment.mockClear();
-    document
-      .querySelector('section')!
-      .setAttribute('data-payload-patch-fields', permissions + ',' + path(2));
     leaves(fields)[2]!.text = 'Permitted';
     post(fields);
     await tick();

@@ -203,7 +203,7 @@ export { detectProtocolProfile } from './core/protocol-profile';
 export type { ProtocolProfile, ProtocolProfileName } from './core/protocol-profile';
 
 // Typed binding DSL — pair with codegen-emitted schema interfaces
-export { bind, bindByPath, createPreviewBindings } from './dsl';
+export { bind, bindByPath, bindMany, createPreviewBindings } from './dsl';
 export { previewBindingsFromLocals } from './adapters/shared/locals';
 export type {
   BindOptions,

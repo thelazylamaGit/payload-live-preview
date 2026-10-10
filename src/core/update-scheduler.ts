@@ -77,9 +77,29 @@ export class UpdateScheduler {
   private readonly onFlush: ((stats: FlushStats) => void) | undefined;
   private readonly scheduleFrame: (callback: FrameRequestCallback) => number;
   private readonly cancelFrame: (handle: number) => void;
-  private pending = new Map<Element, BufferEntry>();
-  private readonly replay = new Map<Element, BufferEntry>();
-  private readonly activeFlushes = new Set<Map<Element, BufferEntry>>();
+  private slots = new WeakMap<Element, Map<string, CachedElement>>();
+  private destination(target: CachedElement): string {
+    return target.cssBinding !== undefined
+      ? 'css:' + target.cssBinding.property
+      : target.targetAttribute !== undefined
+        ? 'attr:' + target.targetAttribute
+        : 'content';
+  }
+  private slot(target: CachedElement): CachedElement {
+    let destinations = this.slots.get(target.element);
+    if (destinations === undefined) {
+      destinations = new Map();
+      this.slots.set(target.element, destinations);
+    }
+    const name = this.destination(target);
+    const previous = destinations.get(name);
+    if (previous !== undefined) return previous;
+    destinations.set(name, target);
+    return target;
+  }
+  private pending = new Map<CachedElement, BufferEntry>();
+  private readonly replay = new Map<CachedElement, BufferEntry>();
+  private readonly activeFlushes = new Set<Map<CachedElement, BufferEntry>>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private debounceToken = 0;
   private deadlineTimer: ReturnType<typeof setTimeout> | null = null;
@@ -125,15 +145,17 @@ export class UpdateScheduler {
         return;
       }
     }
-    const existing = this.pending.get(update.target.element);
+    const slot = this.slot(update.target);
+    const existing = this.pending.get(slot);
     if (existing) {
+      existing.target = update.target;
       existing.value = update.value;
       existing.allFields = update.allFields;
       existing.revision = update.revision;
       existing.data = update.data;
       existing.valueIdentity = update.valueIdentity;
     } else {
-      this.pending.set(update.target.element, {
+      this.pending.set(slot, {
         target: update.target,
         value: update.value,
         allFields: update.allFields,
@@ -176,21 +198,22 @@ export class UpdateScheduler {
 
   /** Apply the buffered value for an element that scrolled into view. */
   notifyVisible(element: Element): void {
-    const entry = this.replay.get(element);
-    if (!entry) return;
-    this.replay.delete(element);
-    if (!this.isCurrent(entry)) return;
-    const t0 = performance.now();
-    const applied = this.didApply(entry) ? 1 : 0;
-    this.onFlush?.(
-      this.statsFor(
-        entry,
-        applied,
-        0,
-        performance.now() - t0,
-        applied === 1 ? [entry.target.fieldName] : [],
-      ),
-    );
+    for (const entry of this.replay.values()) {
+      if (entry.target.element !== element) continue;
+      this.replay.delete(this.slot(entry.target));
+      if (!this.isCurrent(entry)) return;
+      const t0 = performance.now();
+      const applied = this.didApply(entry) ? 1 : 0;
+      this.onFlush?.(
+        this.statsFor(
+          entry,
+          applied,
+          0,
+          performance.now() - t0,
+          applied === 1 ? [entry.target.fieldName] : [],
+        ),
+      );
+    }
   }
 
   /**
@@ -203,10 +226,16 @@ export class UpdateScheduler {
     for (const flush of this.activeFlushes) this.retargetBuffer(flush, target);
   }
 
+  forgetBinding(target: CachedElement): void {
+    for (const buffer of [this.pending, this.replay, ...this.activeFlushes]) {
+      for (const [key, entry] of buffer) if (entry.target === target) buffer.delete(key);
+    }
+  }
+
   forget(element: Element): void {
-    this.pending.delete(element);
-    this.replay.delete(element);
-    for (const flush of this.activeFlushes) flush.delete(element);
+    for (const buffer of [this.pending, this.replay, ...this.activeFlushes]) {
+      for (const key of buffer.keys()) if (key.element === element) buffer.delete(key);
+    }
   }
 
   /** Cancel timers and drop buffered state without draining it. */
@@ -309,11 +338,11 @@ export class UpdateScheduler {
         if (!this.isCurrent(entry)) continue;
         batchEntry ??= entry;
         if (!visible) {
-          this.replay.set(entry.target.element, entry);
+          this.replay.set(this.slot(entry.target), entry);
           deferred += 1;
           continue;
         }
-        this.replay.delete(entry.target.element);
+        this.replay.delete(this.slot(entry.target));
         if (this.didApply(entry)) {
           applied += 1;
           appliedFields.push(entry.target.fieldName);
@@ -349,17 +378,29 @@ export class UpdateScheduler {
     return outcome !== false || !usesNoWriteOutcome(this.apply);
   }
 
-  private retargetBuffer(buffer: Map<Element, BufferEntry>, target: CachedElement): void {
-    const entry = buffer.get(target.element);
-    if (entry === undefined) return;
+  private retargetBuffer(buffer: Map<CachedElement, BufferEntry>, target: CachedElement): void {
+    const slot = this.slot(target);
+    const current = buffer.get(slot);
+    const match =
+      current !== undefined
+        ? ([slot, current] as const)
+        : [...buffer].find(
+            ([, entry]) =>
+              entry.target.element === target.element &&
+              entry.target.fieldName === target.fieldName,
+          );
+    if (match === undefined) return;
+    const [key, entry] = match;
     if (entry.target.fieldName !== target.fieldName || entry.target.locale !== target.locale) {
-      buffer.delete(target.element);
+      buffer.delete(key);
       return;
     }
     entry.target = target;
+    this.slots.get(target.element)?.set(this.destination(target), key);
   }
 
   private clearWork(): void {
+    this.slots = new WeakMap();
     this.pending.clear();
     this.replay.clear();
     for (const flush of this.activeFlushes) flush.clear();

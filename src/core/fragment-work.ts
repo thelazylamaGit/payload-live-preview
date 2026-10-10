@@ -1,3 +1,4 @@
+import type { CachedElement } from './types';
 /** Per-boundary ownership of the existing fragment strategy's in-flight work. */
 import type { PayloadLivePreviewData } from '@/types/payload-protocol';
 import { trustedHtml } from '@security/trusted-types';
@@ -5,7 +6,7 @@ import { isBindingInScope, messageOwnerKeys, readDocumentId } from './binding-ow
 import { ElementCache, resolveBindingOwner } from './cache';
 import { parseDependencyList } from './dependencies';
 import { bindingValue } from './field-value';
-import { canPatchFragment } from './fragment-patches';
+import { bindingsForPath, canPatchFragment } from './fragment-patches';
 import { isInsideIsland } from './islands';
 import { morphElement } from './morph';
 import type { FragmentWork, RuntimeDeps, RuntimeState, UpdateTransaction } from './runtime-state';
@@ -195,16 +196,13 @@ export class FragmentWorkRunner {
   }
 
   /** Check the returned binding contract and rebase with the existing writers before morphing. */
-  private morph(work: FragmentWork, html: string, patchFields?: readonly string[]): boolean {
+  private morph(work: FragmentWork, html: string): boolean {
     if (!this.current(work)) return false;
     const boundary = work.boundary;
     const template = boundary.ownerDocument.createElement('template');
     template.innerHTML = trustedHtml(html);
     const rendered = boundary.cloneNode(false) as Element;
     rendered.append(template.content);
-    if (patchFields !== undefined) {
-      rendered.setAttribute('data-payload-patch-fields', patchFields.join(','));
-    }
     if (work.paths.size > 0) {
       const owner = resolveBindingOwner(boundary);
       const cache = new ElementCache({
@@ -215,10 +213,20 @@ export class FragmentWorkRunner {
       cache.buildFromRoot(rendered);
       if (rendered.hasAttribute('data-payload-field')) cache.add(rendered);
       if (!canPatchFragment({ ...this.deps, cache }, rendered, work.paths)) return false;
+      const rebased = new Set<CachedElement>();
       for (const path of work.paths) {
-        for (const target of cache.get(path) ?? []) {
-          const value = bindingValue(work.data.fields, target, path, work.transaction.locale);
-          if (value === undefined || !this.current(work)) return false;
+        for (const target of bindingsForPath(cache, path)) {
+          if (rebased.has(target)) continue;
+          rebased.add(target);
+          const value = bindingValue(
+            work.data.fields,
+            target,
+            target.fieldName,
+            work.transaction.locale,
+          );
+          if ((value === undefined && target.cssBinding === undefined) || !this.current(work)) {
+            return false;
+          }
           const transformed = this.host.transform(target, value, work.data.fields, () =>
             this.current(work),
           );
@@ -241,11 +249,9 @@ export class FragmentWorkRunner {
       }
     }
     if (!this.current(work)) return false;
-    for (const path of parseDependencyList(rendered.getAttribute('data-payload-patch-fields'))) {
-      for (const target of this.deps.cache.get(path) ?? []) {
-        if (boundary.contains(target.element)) {
-          this.state.lastAppliedIdentity.delete(target.element);
-        }
+    for (const target of this.deps.cache.values()) {
+      if (boundary.contains(target.element)) {
+        this.state.lastAppliedIdentity.delete(target);
       }
     }
     morphElement(boundary, rendered, { keyAttributes: [KEY_ATTRIBUTE] });
@@ -293,8 +299,8 @@ export class FragmentWorkRunner {
       log: (code, detail) => {
         deps.log('fragment', code, detail);
       },
-      morph: (_boundary, html, patchFields) => {
-        applied = this.morph(work, html, patchFields);
+      morph: (_boundary, html) => {
+        applied = this.morph(work, html);
         if (!applied && isCurrent()) {
           work.valid = false;
           work.pending = true;

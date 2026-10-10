@@ -17,17 +17,17 @@
     "vitest.stryker.config.ts"
   ],
   "totals": {
-    "files": 337,
-    "suites": 723,
-    "tests": 3076,
-    "benchmarks": 12
+    "files": 339,
+    "suites": 726,
+    "tests": 3077,
+    "benchmarks": 18
   },
   "groups": {
     "benchmarks": {
-      "files": 3,
-      "suites": 10,
+      "files": 4,
+      "suites": 11,
       "tests": 0,
-      "benchmarks": 12
+      "benchmarks": 18
     },
     "browser-bench": {
       "files": 1,
@@ -60,13 +60,20 @@
       "benchmarks": 0
     },
     "unit": {
-      "files": 278,
-      "suites": 647,
-      "tests": 2843,
+      "files": 279,
+      "suites": 649,
+      "tests": 2844,
       "benchmarks": 0
     }
   },
   "files": [
+    {
+      "path": "tests/benchmarks/css-bindings.bench.ts",
+      "group": "benchmarks",
+      "suites": 1,
+      "tests": 0,
+      "benchmarks": 6
+    },
     {
       "path": "tests/benchmarks/hot-paths.bench.ts",
       "group": "benchmarks",
@@ -491,7 +498,7 @@
       "path": "tests/unit/adapters/astro-fragments.test.ts",
       "group": "unit",
       "suites": 5,
-      "tests": 18,
+      "tests": 17,
       "benchmarks": 0
     },
     {
@@ -866,6 +873,13 @@
       "benchmarks": 0
     },
     {
+      "path": "tests/unit/core/css-binding.test.ts",
+      "group": "unit",
+      "suites": 2,
+      "tests": 8,
+      "benchmarks": 0
+    },
+    {
       "path": "tests/unit/core/data-merger-can-merge.test.ts",
       "group": "unit",
       "suites": 1,
@@ -953,14 +967,14 @@
       "path": "tests/unit/core/fragment-lexical-leaves.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 16,
+      "tests": 12,
       "benchmarks": 0
     },
     {
       "path": "tests/unit/core/fragment-patch-fields.test.ts",
       "group": "unit",
       "suites": 1,
-      "tests": 15,
+      "tests": 14,
       "benchmarks": 0
     },
     {
@@ -1716,7 +1730,7 @@
       "path": "tests/unit/fragment/client.test.ts",
       "group": "unit",
       "suites": 3,
-      "tests": 15,
+      "tests": 14,
       "benchmarks": 0
     },
     {

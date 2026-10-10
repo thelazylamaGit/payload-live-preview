@@ -37,6 +37,12 @@ export interface CachedElement {
     readonly altField?: string;
     readonly arraySeparator?: string;
     readonly arrayTemplate?: string;
+    readonly cssBinding?: {
+        readonly property: string;
+        readonly supported?: boolean;
+        readonly template?: readonly string[];
+        readonly fallback?: string;
+    };
     readonly dependsOn?: readonly string[];
     readonly element: Element;
     readonly explicitFieldType?: boolean;
@@ -79,7 +85,7 @@ export interface FieldRenderer {
 }
 
 // @public
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
+export type FieldType = PayloadFieldType | 'css' | 'html' | 'url' | 'image' | 'structural-array';
 
 // @internal (undocumented)
 export const ISLAND_ATTRIBUTE = "data-payload-island";

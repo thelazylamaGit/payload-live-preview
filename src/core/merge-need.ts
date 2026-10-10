@@ -11,13 +11,14 @@
  * many costs a round trip nobody sees.
  */
 
+import { isBindingInScope, messageOwnerKeys, readDocumentId } from './binding-owner';
 import { lookupSchema, type SchemaIndex } from '@schema/index';
 import type { ElementCache } from './cache';
 import type { DataMerger, MergeRequest, MergeResult } from './data-merger';
-import type { DependencyMap } from './dependencies';
+import { mergeDependencyMaps } from './dependencies';
 import { FieldChangeTracker } from './field-changes';
 import type { RuntimeDeps, UpdateTransaction } from './runtime-state';
-import { canPatchFragment } from './fragment-patches';
+import { bindingsForPath, canPatchFragment, referencePath } from './fragment-patches';
 import { resolveFieldValue } from './field-value';
 import { FRAGMENT_ATTRIBUTE } from './strategies';
 import { hasBindingBelow, SYSTEM_FIELD_NAMES } from './unbound-fields';
@@ -30,7 +31,6 @@ import { hasBindingBelow, SYSTEM_FIELD_NAMES } from './unbound-fields';
  * question about a binding and about a value.
  */
 const SELF_SUFFICIENT_TYPES: ReadonlySet<string> = new Set([
-  'hexColor',
   'text',
   'textarea',
   'email',
@@ -45,9 +45,6 @@ const SELF_SUFFICIENT_TYPES: ReadonlySet<string> = new Set([
   'ui',
   'html',
 ]);
-
-/** The raw diff answers "what did the editor move", which no dependency map changes. */
-const NO_DEPENDENCIES: DependencyMap = {};
 
 export interface MergePlan {
   /** Whether the server can still add something to these values. */
@@ -96,13 +93,34 @@ export class MergeNeed {
     // Advanced for every message, including the ones that return here: the next
     // diff has to be against what the panel last posted either way.
     const optIn =
-      !(typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__) &&
-      deps.root.querySelector('[data-payload-patch-fields]') !== null;
-    const { changed, paths, baseline, structuralPaths } = this.rawChanges.diff(
+      !(typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__) && deps.cache.hasPatchFields;
+    const {
+      changed,
+      paths: rawPaths,
+      invalidated,
+      baseline,
+      structuralPaths,
+    } = this.rawChanges.diff(
       raw,
-      NO_DEPENDENCIES,
+      optIn ? mergeDependencyMaps(deps.dependencies, deps.cache.dependencyMap()) : {},
       optIn,
     );
+    const paths = optIn ? new Set([...rawPaths, ...invalidated]) : rawPaths;
+    const candidates =
+      optIn && deps.strategies.fragment !== undefined
+        ? deps.strategies.fragment.plan(deps.root, new Set([...changed, ...invalidated])).filter(
+            (boundary) =>
+              !deps.scopeBindingsByOwner ||
+              isBindingInScope(
+                deps.cache.boundaryMetadata(boundary)?.owner,
+                messageOwnerKeys({
+                  globalSlug: transaction.message.globalSlug,
+                  collectionSlug: transaction.message.collectionSlug,
+                  documentId: readDocumentId(raw),
+                }),
+              ),
+          )
+        : undefined;
     if (
       optIn &&
       !baseline &&
@@ -112,14 +130,19 @@ export class MergeNeed {
       [...paths].every(
         (path) =>
           isScalar(resolveFieldValue(raw, path, undefined)) &&
-          deps.cache.get(path)?.some((target) => SELF_SUFFICIENT_TYPES.has(target.fieldType)) ===
-            true,
+          !referencePath(path, transaction.schemaIndex) &&
+          bindingsForPath(deps.cache, path).some(
+            (target) =>
+              target.cssBinding !== undefined ||
+              target.targetAttribute !== undefined ||
+              SELF_SUFFICIENT_TYPES.has(target.fieldType),
+          ),
       ) &&
-      deps.strategies.fragment
-        ?.plan(deps.root, changed)
-        .every((boundary) => canPatchFragment(deps, boundary, paths, structuralPaths)) === true
+      candidates?.every((boundary) =>
+        canPatchFragment(deps, boundary, paths, structuralPaths, transaction.schemaIndex),
+      ) === true
     ) {
-      const fields = overlayPaths(this.resolved ?? raw, raw, paths);
+      const fields = overlayPaths(this.resolved ?? raw, raw, rawPaths);
       this.resolved = fields;
       return { merge: false, fields };
     }

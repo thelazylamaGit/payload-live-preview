@@ -455,163 +455,146 @@ hook islands coexist on one page.
 
 One revision per admin message, with at most one render in flight per boundary.
 Newer edits coalesce into the latest pending state without repeatedly aborting
-requests. At most four requests run at once (`maxConcurrent` on
-`createFragmentStrategy()`), and independent boundaries can finish independently.
+requests. At most four requests run at once, and independent boundaries can
+finish independently. Compatible binding edits rebase the latest values on the
+returned markup before morphing. New structural or server-owned edits invalidate
+the response and render the latest pending state. Parent rendering suppresses
+descendant requests and direct writes. Binding metadata is refreshed after
+replacement through the existing cache lifecycle.
 
-An edit covered by the existing explicit `patchFields` permissions and matching
-bindings can reuse the pending render. Before morphing, the runtime checks the
-returned permissions and bindings, then uses the existing binding writers to
-apply the latest values to the returned markup. The DOM therefore receives the
-current values together with the rendered structure, without flashing older text.
-A newer structural or server-owned edit invalidates the response; when it settles,
-the runtime discards it and renders the latest pending state. Parent rendering
-continues to suppress descendant requests and direct writes.
+## Explicit patch permissions inside fragments
 
-Newly created text leaves without mounted bindings cannot prove compatibility,
-even when their paths are permitted. Their edits keep the server path until a
-current render installs matching bindings. Sustained server-owned changes can
-therefore postpone a visible update, but request churn stays bounded by response
-completion rather than the number of keystrokes. Failed renders retain owed work
-and use the existing fallback and retry behaviour; teardown aborts pending work.
+Keep the existing boundary permission list and declare the bindings normally:
 
-## Direct bindings inside a fragment
-
-`preview.boundary(id, { dependsOn, patchFields })` explicitly permits **exact bound
-field paths** to update without re-rendering that boundary. The declaration is a
-promise that those values have no other server-rendered effects there: do not opt
-in a field used for conditional markup, layout, or server calculations. A binding
-alone never grants permission. Native text bindings use this contract too.
-
-For example, with the existing request-authorized `preview` helper and fragment
-endpoint, an Astro block list can expose only its safe text and colour slots:
-
-```astro
----
-// `preview` is the existing createPreviewBindings({ authorization, owner }) helper.
-const { page, preview } = Astro.props;
-const patchFields = page.blocks.flatMap((_, index) => [
-  `blocks.${index}.caption`,
-  `blocks.${index}.colour`,
-]);
-const defaultColour = '#0008';
----
-<section {...preview.owner()} {...preview.boundary('page-blocks', {
+```ts
+preview.boundary('page-blocks', {
   dependsOn: ['blocks'],
-  patchFields,
-})}>
-  {page.blocks.map((block, index) => (
-    <article data-payload-key={block.id}>
-      <p {...preview.bind(`blocks.${index}.caption`)}>{block.caption}</p>
-      <div
-        {...preview.bind(`blocks.${index}.colour`, {
-          cssProperty: 'background-color',
-          cssDefault: defaultColour,
-        })}
-        style={`background-color: ${block.colour || defaultColour}`}
-      />
-    </article>
-  ))}
-</section>
-```
-
-Keep rendering your existing block components in the fragment endpoint, and have
-those components emit the same indexed bindings. `patchFields` uses the existing
-dotted field paths, including numeric array indices; it has no wildcards and does
-not inherit permission to descendants. `bindByPath` drops array indices, so use
-`bind` for an indexed instance. Ordinary arrays need stable item `id`s for direct
-edits; without them changes conservatively render on the server. Reordering, insertion,
-removal, block-type changes, unknown or unbound paths, initial synchronisation and
-forced renders keep the server path. Reordering refreshes bindings immediately.
-New slots beyond the declared indices remain server-rendered until the boundary's
-configuration is updated (for example, by a page render).
-
-Lexical `children` arrays under a `root` node are the narrow exception: existing
-`type: 'text'` nodes can change their string `text` values without a fragment,
-provided every relevant changed path is explicitly permitted and bound inside
-that boundary. Have the Astro project's existing rich-text template wrap each
-safe text leaf in an ordinary text binding, inside its server-rendered formatting:
-
-```astro
-<strong><span
-  {...preview.bind('blocks.0.content.root.children.0.children.0.text', { type: 'text' })}
->{node.text}</span></strong>
-```
-
-This emits `data-payload-field="blocks.0.content.root.children.0.children.0.text"`
-and `data-payload-type="text"` in authorized preview. Add that same exact path to
-the enclosing boundary's `patchFields`. Generate paths from the current block
-and Lexical child indices in the existing Astro template; bind the span containing
-only that leaf's text, rather than a paragraph containing multiple leaves. Keep
-bindings for empty existing leaves too. No client renderer or registration is
-needed. Formatting, style, node metadata, splitting/merging, insertion/removal,
-reordering and embedded-component edits still require fragments, including when
-mixed with text edits. Ambiguous edits that look like a surviving node moving to
-another position conservatively render a fragment.
-
-After a structural fragment update, emit bindings using the new indices and
-recompute the exact safe leaf permissions from the same rendered document.
-Fragment responses replace the boundary's **inner HTML**; the outer boundary's
-permissions can be refreshed by opting the existing endpoint registry entry into
-`patchFields`:
-
-```ts
-registry: {
-  rich: {
-    component: RichBlock,
-    props: (input) => richBlockProps(input),
-    patchFields: (input) => [
-      ...safeTextLeafPaths(input), // Application helper using current render indices.
-      'blocks.0.colour',
-    ],
-  },
-}
-```
-
-The callback receives the same current render input as `props` and may return a
-promise. It runs only during an opted-in fragment request, after HTML rendering;
-direct text or colour updates reuse the current permissions without calling it.
-The response's `patchFields` completely replaces `data-payload-patch-fields` after
-a successful current render, before the existing binding-cache refresh. Include
-all desired colour permissions as well as exact safe leaf paths. An empty array
-clears the list; omission preserves it. Failed, aborted and stale responses leave
-permissions unchanged. Permissions are never inferred from the returned bindings.
-
-If an affected boundary has server work, its inner bindings are left alone until
-a compatible response applies their latest values with the rendered structure.
-Other boundaries can patch independently. A newer direct edit cannot drop an
-unfinished image edit, and incompatible responses cannot apply.
-
-`cssProperty: 'background-color'` selects the built-in `hexColor` renderer. This is
-the only supported CSS property. It accepts `#rgb`, `#rgba`, `#rrggbb` and
-`#rrggbbaa`, including alpha. `null` or `''` uses `cssDefault`; without a default it
-removes just the inline background colour, revealing stylesheet/inherited
-behaviour. Use the same fallback in your server render. A missing field retains
-the usual runtime handling. Invalid/intermediate colours and invalid defaults
-leave the DOM unchanged. CSS expressions, named colours, other properties and
-complete `style` attribute writes are not enabled. Raw attributes are
-`data-payload-type="hexColor"`, `data-payload-css-property="background-color"` and
-optional `data-payload-css-default="#0008"`.
-
-For responsive colour dragging, configure the existing Astro integration:
-
-```ts
-livePreview({
-  // Keep your existing origins and fragment endpoint configuration.
-  debounceMs: 200,
-  bindingDebounceMs: 0,
+  patchFields: [
+    'blocks.0.cornerRadius',
+    'blocks.0.mediaShare',
+    'blocks.0.imageFit',
+    'blocks.0.title',
+  ],
 });
 ```
 
-`bindingDebounceMs` controls only direct DOM writes. Omitted, it falls back to
-`debounceMs`. Zero batches the latest values on the next animation frame; a
-nonzero value uses the existing leading frame and four-window maximum wait.
-Population keeps the `debounceMs` window, and fragment request planning and
-supersession remain unchanged. Server-dependent edits and initial synchronization
-may still wait for server results; visibility gating still applies.
+Only listed fields with explicit usable bindings may skip population and fragment
+requests. Text, attributes and CSS all use the existing renderer/transform and
+scheduler pipeline. A binding alone never grants patch permission. Mixed
+permitted/unpermitted or unbound changes render the affected fragment.
 
-Scheduling retains its defaults: the leading frame, 50 ms debounce and maximum
-wait of four debounce windows. On pages opting into `patchFields`, pending frames and maximum-wait deadlines survive
-new revisions, so sustained dragging continues to display the latest values.
-There is no extra runtime on public pages: the existing authorization helper
-suppresses both the boundary configuration and colour-binding attributes.
-Without `patchFields`, fragment routing retains its existing behaviour.
+A listed object or group path permits its descendant paths, so changing either
+`cornerRadius.value` or `cornerRadius.unit` updates its formatted binding. This
+also lets an explicitly permitted Lexical field retain its text-leaf patches.
+Container insertion/deletion/reordering and changes to Lexical markup still
+render on the server. Unknown destinations, guessed bindings, unresolved
+relationships, initial synchronization and forced refreshes remain conservative.
+
+**List a field only when its bindings handle the complete effect of the field.**
+If it also affects Astro/server conditional markup, leave it out of `patchFields`.
+Bindings in another boundary or document owner cannot authorize a local patch.
+Without `patchFields`, fragment behaviour remains unchanged and no detailed
+path diff is enabled solely for these permissions. Automatic `preferBindings`
+coverage inference is removed.
+
+## Generic style bindings
+
+```ts
+preview.bind('blocks.0.cornerRadius', {
+  cssProperty: 'border-radius',
+  format: '{value}{unit}',
+  fallback: '0px',
+});
+
+preview.bind('blocks.0.mediaShare', {
+  cssProperty: '--media-share',
+  format: '{value}%',
+  fallback: '50%',
+});
+
+preview.bind('blocks.0.imageFit', {
+  cssProperty: 'object-fit',
+  fallback: 'cover',
+});
+```
+
+Without `format`, values must be CSS-ready strings or finite numbers. Zero is
+preserved. With a scalar, `{value}` denotes that scalar. With an object, each
+placeholder denotes an own data property, such as `{ value: 12, unit: 'px' }`.
+Editing either member updates the binding. Missing/null/empty inputs or missing
+placeholders use `fallback`; without a fallback the inline property is removed.
+Invalid final values also remove the property. Complex conversions use the
+existing `transformValue` hook; its output passes the same CSS policy.
+Templates are parsed when indexing, never during updates. No expressions,
+property traversal, accessors, object coercion or executable callbacks are encoded.
+
+Spread multiple declarations once to avoid attribute collisions:
+
+```astro
+<div {...preview.bindMany(
+  preview.bind('blocks.0.cornerRadius', {
+    cssProperty: 'border-radius', format: '{value}{unit}', fallback: '0px',
+  }),
+  preview.bind('blocks.0.mediaShare', {
+    cssProperty: '--media-share', format: '{value}%', fallback: '50%',
+  }),
+  preview.bind('blocks.0.title'),
+)} />
+```
+
+`bindMany` also exists beside the low-level `bind` helper. It combines ordinary
+single declarations, preserves the first binding's attributes, and stores the
+remaining declarations in `data-payload-bindings`. Do not nest `bindMany` calls. Each declaration must have a distinct destination; only one content binding is allowed per element.
+All entries use the same original cache, transforms and scheduler, with separate
+buffer and identity slots per binding. Writes use `style.setProperty()` for one
+property, or `removeProperty()`, preserving other styles and content.
+
+### CSS value policy
+
+Declarations (destinations, formats, fallbacks) must be developer-authored.
+Payload messages supply values only. Property names must be lowercase standard
+CSS identifiers or custom names matching `--[a-zA-Z][a-zA-Z0-9_-]*`.
+Standard destinations must exist on the browser's CSS style declaration to qualify
+for local fragment routing. Vendor-prefixed destinations are excluded.
+
+The default policy permits ASCII word tokens, spaces, numeric punctuation,
+percentages, hex colours (3/4/6/8 digits), and balanced calls to these functions:
+`rgb/rgba/hsl/hsla/hwb/lab/lch/oklab/oklch`, `calc/min/max/clamp`, the linear/radial
+and repeating gradient functions, and `translate/scale/rotate/skew/matrix` with
+their listed axis/3d variants. It rejects controls, quotes, backslashes, comments,
+semicolons, colons, at-rules, priorities and other functions. Templates are limited
+to 1,024 characters and 32 substitutions; final values to 2,048 characters.
+Prototype-related keys are rejected. Placeholder properties must be own primitive
+string/finite-number data properties. Browser syntax checks, when available,
+are additional checks, never the security policy.
+
+**URLs are unsupported by default, including in custom properties.** No URL
+policy is provided by this API, so URL-bearing CSS is always rejected. `var()`
+is also rejected because indirect references could carry URL-bearing values;
+custom properties may still receive safe literal tokens. Direct values, formatted
+values, transform results and fallbacks all follow the identical token policy.
+The policy deliberately excludes some valid CSS, including quoted font names,
+strings and newer functions. It does not certify visual suitability.
+
+The authorized preview helper suppresses every declaration on public responses.
+Existing preview authorization, origin/source checks, endpoint restrictions,
+sanitization and ownership continue to apply.
+
+### Migration and scheduling
+
+The fork-only `cssDefault` is replaced by `fallback`. Background colour uses
+`cssProperty: 'background-color'` with the generic policy; named and functional
+colours are accepted as well as validated hex colours. Remove the old
+`data-payload-type="hexColor"` and rename the old raw CSS default attribute to
+`data-payload-css-fallback`. Boundary `patchFields` permissions are retained. Dynamic `patchFields` response
+metadata and endpoint callbacks are removed: developer-authored boundary
+declarations are the sole source of permissions. List a parent field when its
+server-rendered text-leaf paths can change. The experimental `preferBindings`
+option is removed.
+
+`bindingDebounceMs` still controls only direct writes, falling back to
+`debounceMs`. Zero batches the latest values on the next animation frame.
+Nonzero values retain the leading frame and four-window maximum wait. Opted-in
+boundaries preserve pending frames and deadlines across revisions, keeping
+sustained edits responsive. Visibility gating still applies; initial and
+server-dependent edits may wait for server results.

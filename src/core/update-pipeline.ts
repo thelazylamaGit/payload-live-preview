@@ -120,8 +120,7 @@ export class UpdatePipeline {
     state.activeUpdate = transaction;
     deps.scheduler.acceptRevision(
       revision,
-      deps.bindingDebounceMs !== undefined ||
-        deps.root.querySelector('[data-payload-patch-fields]') !== null,
+      deps.bindingDebounceMs !== undefined || deps.cache.hasPatchFields,
     );
     state.updateCount += 1;
     if (message.protocolVersion !== undefined) {
@@ -198,11 +197,7 @@ export class UpdatePipeline {
     const { deps, state } = this;
     transaction.latestData = data;
     const dependencies = mergeDependencyMaps(deps.dependencies, deps.cache.dependencyMap());
-    const changes = state.changes.diff(
-      data.fields,
-      dependencies,
-      deps.root.querySelector('[data-payload-patch-fields]') !== null,
-    );
+    const changes = state.changes.diff(data.fields, dependencies, deps.cache.hasPatchFields);
     if (changes.baseline && !refined && deps.autoBind !== 'off') {
       // Once, on the message that describes what the server rendered (ADR 0014
       // §1). The lean profile leaves the search out; esbuild folds the branch.
@@ -329,7 +324,7 @@ export class UpdatePipeline {
         }
         if (kind === 'fragment' && plan === null) this.strategies.warnFragmentFallback(target);
         const value = bindingValue(data.fields, target, fieldName, transaction.locale);
-        if (value === undefined) {
+        if (value === undefined && target.cssBinding === undefined) {
           state.absentFields.add(fieldName);
           continue;
         }
@@ -346,7 +341,7 @@ export class UpdatePipeline {
         const identity = trackIdentity
           ? bindingIdentity(target, transformed, data.fields, transaction.locale)
           : undefined;
-        const last = state.lastAppliedIdentity.get(target.element);
+        const last = state.lastAppliedIdentity.get(target);
         if (
           !transaction.forceRender &&
           deps.skipUnchanged &&

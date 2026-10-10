@@ -5,15 +5,31 @@
 ```ts
 
 import { ComputedRef } from 'vue';
-import { D as DocumentSessionOptions } from '../../document-session-BfBfLVpg.js';
-import { a as DocumentSnapshot } from '../../document-session-BfBfLVpg.js';
-import { b as DocumentStatus } from '../../document-session-BfBfLVpg.js';
 
-export { DocumentSessionOptions }
+// @public (undocumented)
+export interface DocumentSessionOptions {
+    readonly allowedOrigins?: readonly string[];
+    readonly apiRoute?: string;
+    readonly depth?: number;
+    readonly enableLocalhostMatching?: boolean;
+    readonly enableReferrerDetection?: boolean;
+    readonly eventSourcePolicy?: 'any' | 'parent-or-opener';
+    readonly fetchFn?: typeof fetch;
+    readonly serverURL: string;
+    readonly target?: Window;
+}
 
-export { DocumentSnapshot }
+// @public (undocumented)
+export interface DocumentSnapshot<T> {
+    readonly data: T;
+    readonly error: Error | undefined;
+    readonly isLoading: boolean;
+    // (undocumented)
+    readonly status: DocumentStatus;
+}
 
-export { DocumentStatus }
+// @public
+export type DocumentStatus = 'idle' | 'live' | 'unavailable';
 
 // @public
 export interface LivePreviewDocumentRefs<T> {

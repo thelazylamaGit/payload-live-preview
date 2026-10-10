@@ -21,6 +21,12 @@ export interface CachedElement {
     readonly altField?: string;
     readonly arraySeparator?: string;
     readonly arrayTemplate?: string;
+    readonly cssBinding?: {
+        readonly property: string;
+        readonly supported?: boolean;
+        readonly template?: readonly string[];
+        readonly fallback?: string;
+    };
     readonly dependsOn?: readonly string[];
     readonly element: Element;
     readonly explicitFieldType?: boolean;
@@ -163,7 +169,7 @@ export type FieldTransform = (value: unknown, context: {
 }) => unknown;
 
 // @public
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
+export type FieldType = PayloadFieldType | 'css' | 'html' | 'url' | 'image' | 'structural-array';
 
 // @public
 export const highlightPlugin: LivePreviewPlugin;

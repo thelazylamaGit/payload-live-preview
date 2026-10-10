@@ -4,19 +4,6 @@
 
 ```ts
 
-import { e as DIAGNOSTIC_CODES } from './probe-Bzm4fYFL.js';
-import { f as DiagnosticCode } from './probe-Bzm4fYFL.js';
-import { b as DoctorContext } from './probe-Bzm4fYFL.js';
-import { D as DoctorFetch } from './probe-Bzm4fYFL.js';
-import { d as DoctorFinding } from './probe-Bzm4fYFL.js';
-import { g as DoctorLevel } from './probe-Bzm4fYFL.js';
-import { a as DoctorProbe } from './probe-Bzm4fYFL.js';
-import { c as DoctorReport } from './probe-Bzm4fYFL.js';
-import { h as DoctorResponse } from './probe-Bzm4fYFL.js';
-import { l as lowercaseHeaders } from './probe-Bzm4fYFL.js';
-import { r as runDoctor } from './probe-Bzm4fYFL.js';
-import { R as RunDoctorOptions } from './probe-Bzm4fYFL.js';
-
 // @public
 export function analyzeProbe(probe: DoctorProbe, context: DoctorContext & {
     readonly v2?: boolean;
@@ -26,32 +13,133 @@ export function analyzeProbe(probe: DoctorProbe, context: DoctorContext & {
 // @internal
 export function analyzeV2Readiness(probe: DoctorProbe): readonly DoctorFinding[];
 
-export { DIAGNOSTIC_CODES }
+// @public
+export const DIAGNOSTIC_CODES: Readonly<{
+    readonly NoTrustedOrigin: "LP0101";
+    readonly ReferrerOnlyTrust: "LP0102";
+    readonly PluginIncompatible: "LP0103";
+    readonly ProfileFeatureOmitted: "LP0104";
+    readonly OrphanField: "LP0201";
+    readonly UnattributableUpdate: "LP0202";
+    readonly UnboundField: "LP0203";
+    readonly VisibilityGateDeferred: "LP0301";
+    readonly UnsafeAttributeWrite: "LP0401";
+    readonly TextTargetHasChildren: "LP0402";
+    readonly MissingArrayTemplate: "LP0403";
+    readonly StructuralItemUnkeyed: "LP0404";
+    readonly StructuralDuplicateKey: "LP0405";
+    readonly StructuralUnstableKeys: "LP0406";
+    readonly UnsupportedStrategy: "LP0407";
+    readonly UnknownValueFormat: "LP0408";
+    readonly SanitizerDroppedAttribute: "LP0409";
+    readonly UnrenderedBlockKept: "LP0410";
+    readonly UnfaithfulPatch: "LP0411";
+    readonly ServerFormatReplaced: "LP0412";
+    readonly UnrenderedBlockLost: "LP0413";
+    readonly MessageRejected: "LP0501";
+    readonly TokenRejected: "LP0502";
+    readonly ProtocolShapeUnknown: "LP0503";
+    readonly HandlerThrew: "LP0601";
+    readonly TransformThrew: "LP0602";
+    readonly RendererThrew: "LP0603";
+    readonly StartupFailed: "LP0605";
+    readonly ReadyFailed: "LP0606";
+    readonly HydrationWaitTimedOut: "LP0607";
+    readonly AuditRuntimeMissing: "LP0701";
+    readonly AuditNoFrameAncestors: "LP0702";
+    readonly AuditFrameOptionsBlocks: "LP0703";
+    readonly AuditBindingsExposed: "LP0704";
+    readonly AuditGateThresholdExceeded: "LP0705";
+    readonly AuditUnownedBindings: "LP0706";
+    readonly AuditNoBindings: "LP0707";
+    readonly AuditNotAPage: "LP0708";
+    readonly FragmentRequestFailed: "LP0801";
+    readonly FragmentResponseInvalid: "LP0802";
+    readonly FragmentUnauthorized: "LP0803";
+    readonly FragmentSuperseded: "LP0804";
+    readonly RouteRefreshLoop: "LP0805";
+    readonly FragmentStrategyUnavailable: "LP0806";
+    readonly UnboundChangeRefresh: "LP0807";
+    readonly EscalationUnavailable: "LP0808";
+    readonly V2ReadinessGap: "LP0709";
+    readonly RuntimeOnPublicPage: "LP0710";
+}>;
 
-export { DiagnosticCode }
+// @public
+export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[keyof typeof DIAGNOSTIC_CODES];
 
-export { DoctorContext }
+// @public
+export interface DoctorContext {
+    readonly adminOrigin?: string | undefined;
+    // (undocumented)
+    readonly url: string;
+}
 
-export { DoctorFetch }
+// @public
+export type DoctorFetch = (url: string, init: {
+    readonly headers: Readonly<Record<string, string>>;
+}) => Promise<DoctorResponse>;
 
-export { DoctorFinding }
+// @public
+export interface DoctorFinding {
+    // (undocumented)
+    readonly code: DiagnosticCode;
+    readonly detail: string;
+    // (undocumented)
+    readonly level: DoctorLevel;
+    readonly remedy: string;
+    readonly title: string;
+}
 
-export { DoctorLevel }
+// @public
+export type DoctorLevel = 'error' | 'warning' | 'info';
 
-export { DoctorProbe }
+// @public
+export interface DoctorProbe {
+    readonly previewResponse: DoctorResponse;
+    readonly publicResponse: DoctorResponse;
+}
 
-export { DoctorReport }
+// @public (undocumented)
+export interface DoctorReport {
+    // (undocumented)
+    readonly errors: number;
+    readonly findings: readonly DoctorFinding[];
+    // (undocumented)
+    readonly url: string;
+    // (undocumented)
+    readonly warnings: number;
+}
 
-export { DoctorResponse }
+// @public
+export interface DoctorResponse {
+    // (undocumented)
+    readonly body: string;
+    readonly headers: Readonly<Record<string, string>>;
+    // (undocumented)
+    readonly status: number;
+}
 
 // @internal (undocumented)
 export function formatReport(report: DoctorReport): string;
 
-export { lowercaseHeaders }
+// @internal
+export function lowercaseHeaders(headers: Headers): Record<string, string>;
 
-export { runDoctor }
+// @public
+export function runDoctor(options: RunDoctorOptions): Promise<DoctorReport>;
 
-export { RunDoctorOptions }
+// @public (undocumented)
+export interface RunDoctorOptions {
+    readonly adminOrigin?: string | undefined;
+    readonly fetchImpl?: DoctorFetch | undefined;
+    readonly previewHeaders?: Readonly<Record<string, string>> | undefined;
+    readonly previewQueryParams?: readonly string[] | undefined;
+    readonly tokenQueryParam?: string | undefined;
+    // (undocumented)
+    readonly url: string;
+    readonly v2?: boolean;
+}
 
 // (No @packageDocumentation comment for this package)
 

@@ -10,8 +10,9 @@ import {
   parseDependencyList,
   type DependencyMap,
 } from './dependencies';
-import { collectIslands } from './islands';
-import { enclosingFragment, resolveStrategy } from './strategies';
+import { parseCssTemplate, validCssProperty } from '@/types/css-binding';
+import { collectIslands, isInsideIsland } from './islands';
+import { enclosingFragment, FRAGMENT_ATTRIBUTE, resolveStrategy } from './strategies';
 import type { CachedElement, ElementPredicate, FieldType, RendererKey } from './types';
 
 export const FIELD_ATTRIBUTE = 'data-payload-field';
@@ -46,6 +47,11 @@ export const INPUT_TYPE_ATTRIBUTE = 'type';
  */
 export const BINDING_ATTRIBUTES: readonly string[] = [
   FIELD_ATTRIBUTE,
+  'data-payload-css-property',
+  'data-payload-css-fallback',
+  'data-payload-css-format',
+  'data-payload-bindings',
+  'data-payload-patch-fields',
   TYPE_ATTRIBUTE,
   TARGET_ATTRIBUTE_ATTRIBUTE,
   HREF_ATTRIBUTE,
@@ -78,7 +84,7 @@ export function resolveBindingOwner(element: Element): string | undefined {
 const CUSTOM_RENDERER_KEY = /^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/i;
 
 const VALID_FIELD_TYPES: ReadonlySet<FieldType> = new Set<FieldType>([
-  'hexColor',
+  'css',
   'text',
   'textarea',
   'richText',
@@ -127,9 +133,43 @@ export interface ElementCacheOptions {
  */
 export class ElementCache {
   private readonly entriesByField = new Map<string, CachedElement[]>();
-  private entryByElement = new WeakMap<Element, CachedElement>();
+  private entryByElement = new WeakMap<Element, CachedElement[]>();
   private readonly filter: ElementPredicate;
   private count = 0;
+  private patchPermissions = false;
+  private readonly boundaries = new Map<
+    Element,
+    {
+      readonly patchFields: readonly string[];
+      readonly dependencies: readonly string[];
+      readonly owner?: string;
+    }
+  >();
+  boundaryMetadata(element: Element):
+    | {
+        readonly patchFields: readonly string[];
+        readonly dependencies: readonly string[];
+        readonly owner?: string;
+      }
+    | undefined {
+    return this.boundaries.get(element);
+  }
+  private indexBoundary(element: Element): void {
+    if ((typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__) || isInsideIsland(element)) {
+      return;
+    }
+    const patchFields = parseDependencyList(element.getAttribute('data-payload-patch-fields'));
+    if (patchFields.length > 0) this.patchPermissions = true;
+    const owner = resolveBindingOwner(element);
+    this.boundaries.set(element, {
+      patchFields,
+      dependencies: parseDependencyList(element.getAttribute(DEPENDS_ATTRIBUTE)),
+      ...(owner === undefined ? {} : { owner }),
+    });
+  }
+  get hasPatchFields(): boolean {
+    return this.patchPermissions;
+  }
   private dependencies: DependencyMap | null = null;
   private islandRoots: readonly Element[] = [];
 
@@ -158,9 +198,22 @@ export class ElementCache {
   buildFromRoot(root: ParentNode): CacheBuildStats {
     const t0 = performance.now();
     this.clear();
+    const includeFragments = !(typeof __LEAN_BUILD__ !== 'undefined' && __LEAN_BUILD__);
+    if (
+      includeFragments &&
+      'getAttribute' in root &&
+      (root as Element).hasAttribute(FRAGMENT_ATTRIBUTE)
+    ) {
+      this.indexBoundary(root as Element);
+    }
     let elementCount = 0;
-    for (const element of root.querySelectorAll(FIELD_SELECTOR)) {
-      if (this.add(element) !== undefined) elementCount += 1;
+    for (const element of root.querySelectorAll(
+      includeFragments ? FIELD_SELECTOR + ',[' + FRAGMENT_ATTRIBUTE + ']' : FIELD_SELECTOR,
+    )) {
+      if (includeFragments && element.hasAttribute(FRAGMENT_ATTRIBUTE)) this.indexBoundary(element);
+      if (element.hasAttribute(FIELD_ATTRIBUTE) && this.add(element) !== undefined) {
+        elementCount += 1;
+      }
     }
     this.islandRoots = collectIslands(root);
     return {
@@ -177,26 +230,32 @@ export class ElementCache {
   add(element: Element): CachedElement | undefined {
     // Resolve before mutating so a throwing filter leaves the old entry intact.
     const entry = this.filter(element) ? this.resolveBinding(element) : undefined;
-    const previous = this.entryByElement.get(element);
+    const bindings = this.entryByElement.get(element) ?? [];
+    for (const extra of bindings.slice(1)) this.removeEntry(element, extra);
+    const previous = bindings[0];
+    const entries = entry === undefined ? [] : [entry, ...this.addExtras(element)];
     this.dependencies = null;
     if (entry === undefined) {
       if (previous !== undefined) this.removeEntry(element, previous);
       return undefined;
     }
     if (previous !== undefined && this.replaceEntry(previous, entry)) {
-      this.entryByElement.set(element, entry);
+      this.entryByElement.set(element, entries);
       return entry;
     }
     if (previous !== undefined) this.removeEntry(element, previous);
     this.append(entry);
-    this.entryByElement.set(element, entry);
+    this.entryByElement.set(element, entries);
     return entry;
   }
 
   /** Returns whether a binding was removed. */
   remove(element: Element): boolean {
-    const entry = this.entryByElement.get(element);
-    if (!entry) return false;
+    const entries = this.entryByElement.get(element);
+    if (entries === undefined) return false;
+    for (const extra of entries.slice(1)) this.removeEntry(element, extra);
+    const entry = entries[0];
+    if (entry === undefined) return false;
     this.dependencies = null;
     return this.removeEntry(element, entry);
   }
@@ -206,7 +265,7 @@ export class ElementCache {
   }
 
   getByElement(element: Element): CachedElement | undefined {
-    return this.entryByElement.get(element);
+    return this.entryByElement.get(element)?.[0];
   }
 
   get fieldCount(): number {
@@ -234,6 +293,8 @@ export class ElementCache {
     // WeakMap cannot be cleared; a detached element must not observe stale membership.
     this.entryByElement = new WeakMap();
     this.count = 0;
+    this.boundaries.clear();
+    this.patchPermissions = false;
     this.dependencies = null;
     this.islandRoots = [];
   }
@@ -249,7 +310,7 @@ export class ElementCache {
   }
 
   private removeEntry(element: Element, entry: CachedElement): boolean {
-    this.entryByElement.delete(element);
+    if (this.entryByElement.get(element)?.[0] === entry) this.entryByElement.delete(element);
     const bucket = this.entriesByField.get(entry.fieldName);
     const index = bucket === undefined ? -1 : bucket.indexOf(entry);
     if (bucket === undefined || index < 0) return false;
@@ -266,28 +327,97 @@ export class ElementCache {
     this.count += 1;
   }
 
-  private resolveBinding(element: Element): CachedElement | undefined {
-    const fieldName = element.getAttribute(FIELD_ATTRIBUTE);
-    if (fieldName === null || fieldName.length === 0) return undefined;
-    const explicit = element.getAttribute(TYPE_ATTRIBUTE);
-    const targetAttribute = element.getAttribute(TARGET_ATTRIBUTE_ATTRIBUTE);
-    const hrefField = element.getAttribute(HREF_ATTRIBUTE);
-    const srcField = element.getAttribute(SRC_ATTRIBUTE);
-    const altField = element.getAttribute(ALT_ATTRIBUTE);
-    const arrayTemplate = element.getAttribute(ARRAY_TEMPLATE_ATTRIBUTE);
-    const arraySeparator = element.getAttribute(ARRAY_SEPARATOR_ATTRIBUTE);
-    const locale = element.getAttribute(LOCALE_ATTRIBUTE);
-    const format = element.getAttribute(FORMAT_ATTRIBUTE);
+  private addExtras(element: Element): CachedElement[] {
+    const raw = element.getAttribute('data-payload-bindings');
+    if (raw === null || raw.length > 32768) return [];
+    try {
+      const declarations: unknown = JSON.parse(raw);
+      if (!Array.isArray(declarations) || declarations.length > 32) return [];
+      const entries: CachedElement[] = [];
+      for (const declaration of declarations) {
+        if (declaration === null || typeof declaration !== 'object') continue;
+        const attributes = declaration as Record<string, unknown>;
+        const entry = this.resolveBinding(element, {
+          getAttribute: (name) => (typeof attributes[name] === 'string' ? attributes[name] : null),
+          hasAttribute: (name) => typeof attributes[name] === 'string',
+        });
+        if (entry !== undefined) {
+          entries.push(entry);
+          this.append(entry);
+        }
+      }
+      return entries;
+    } catch {
+      /* Malformed developer declaration is not a binding. */
+      return [];
+    }
+  }
+
+  private resolveBinding(
+    element: Element,
+    attributes: Pick<Element, 'getAttribute' | 'hasAttribute'> = element,
+  ): CachedElement | undefined {
+    const fieldName = attributes.getAttribute(FIELD_ATTRIBUTE);
+    if (
+      fieldName === null ||
+      fieldName.length === 0 ||
+      fieldName.split('.').some((part) => ['__proto__', 'prototype', 'constructor'].includes(part))
+    ) {
+      return undefined;
+    }
+    const property = attributes.getAttribute('data-payload-css-property');
+    const cssFormat = attributes.getAttribute('data-payload-css-format');
+    const template = cssFormat === null ? undefined : parseCssTemplate(cssFormat);
+    if (
+      property !== null &&
+      (!validCssProperty(property) || (cssFormat !== null && template === undefined))
+    ) {
+      return undefined;
+    }
+    if (
+      property !== null &&
+      (attributes.hasAttribute(TARGET_ATTRIBUTE_ATTRIBUTE) ||
+        attributes.hasAttribute(RICH_TEXT_ATTRIBUTE) ||
+        attributes.hasAttribute(HTML_ATTRIBUTE))
+    ) {
+      return undefined;
+    }
+    const fallback = attributes.getAttribute('data-payload-css-fallback');
+    const explicit = attributes.getAttribute(TYPE_ATTRIBUTE);
+    const targetAttribute = attributes.getAttribute(TARGET_ATTRIBUTE_ATTRIBUTE);
+    const hrefField = attributes.getAttribute(HREF_ATTRIBUTE);
+    const srcField = attributes.getAttribute(SRC_ATTRIBUTE);
+    const altField = attributes.getAttribute(ALT_ATTRIBUTE);
+    const arrayTemplate = attributes.getAttribute(ARRAY_TEMPLATE_ATTRIBUTE);
+    const arraySeparator = attributes.getAttribute(ARRAY_SEPARATOR_ATTRIBUTE);
+    const locale = attributes.getAttribute(LOCALE_ATTRIBUTE);
+    const format = attributes.getAttribute(FORMAT_ATTRIBUTE);
     const owner = resolveBindingOwner(element);
-    const dependsOn = parseDependencyList(element.getAttribute(DEPENDS_ATTRIBUTE));
-    const strategy = element.getAttribute(STRATEGY_ATTRIBUTE);
-    const guessed = element.getAttribute(GUESSED_ATTRIBUTE);
+    const dependsOn = parseDependencyList(attributes.getAttribute(DEPENDS_ATTRIBUTE));
+    const strategy = attributes.getAttribute(STRATEGY_ATTRIBUTE);
+    const guessed = attributes.getAttribute(GUESSED_ATTRIBUTE);
     const fragmentBoundary = enclosingFragment(element);
+    if (fragmentBoundary !== null && !this.boundaries.has(fragmentBoundary)) {
+      this.indexBoundary(fragmentBoundary);
+    }
     return {
       element,
       fieldName,
-      fieldType: resolveFieldType(element),
-      explicitFieldType: explicit !== null && isRendererKey(explicit),
+      ...(property === null
+        ? {}
+        : {
+            cssBinding: {
+              property,
+              supported:
+                property.startsWith('--') ||
+                property in
+                  ((element as Element & { readonly style?: CSSStyleDeclaration }).style ?? {}),
+              ...(template === undefined ? {} : { template }),
+              ...(fallback === null ? {} : { fallback }),
+            },
+          }),
+      fieldType: property === null ? resolveFieldType(element, attributes) : 'css',
+      explicitFieldType: property !== null || (explicit !== null && isRendererKey(explicit)),
       strategyKind: resolveStrategy(element) ?? 'unknown',
       ...(fragmentBoundary !== null ? { fragmentBoundary } : {}),
       ...(targetAttribute !== null && targetAttribute.length > 0 ? { targetAttribute } : {}),
@@ -301,20 +431,23 @@ export class ElementCache {
       ...(owner !== undefined ? { owner } : {}),
       ...(dependsOn.length > 0 ? { dependsOn } : {}),
       ...(strategy !== null && strategy.length > 0 ? { strategy } : {}),
-      ...(element.hasAttribute(BOUNDARY_ATTRIBUTE) ? { hidesWhenEmpty: true } : {}),
+      ...(attributes.hasAttribute(BOUNDARY_ATTRIBUTE) ? { hidesWhenEmpty: true } : {}),
       ...(guessed !== null ? { guessed } : {}),
     };
   }
 }
 
 /** Explicit `data-payload-type`, then element heuristics, then `text`. */
-export function resolveFieldType(element: Element): RendererKey {
-  const explicit = element.getAttribute(TYPE_ATTRIBUTE);
+export function resolveFieldType(
+  element: Element,
+  attributes: Pick<Element, 'getAttribute' | 'hasAttribute'> = element,
+): RendererKey {
+  const explicit = attributes.getAttribute(TYPE_ATTRIBUTE);
   if (explicit !== null && isRendererKey(explicit)) return explicit;
-  if (element.hasAttribute(RICH_TEXT_ATTRIBUTE)) return 'richText';
-  if (element.hasAttribute(HTML_ATTRIBUTE)) return 'html';
-  if (element.hasAttribute(STRUCTURAL_ATTRIBUTE)) return 'structural-array';
-  if (element.hasAttribute(ARRAY_ATTRIBUTE)) return 'array';
+  if (attributes.hasAttribute(RICH_TEXT_ATTRIBUTE)) return 'richText';
+  if (attributes.hasAttribute(HTML_ATTRIBUTE)) return 'html';
+  if (attributes.hasAttribute(STRUCTURAL_ATTRIBUTE)) return 'structural-array';
+  if (attributes.hasAttribute(ARRAY_ATTRIBUTE)) return 'array';
   if (element.tagName === 'IMG') return 'image';
   if (element.tagName === 'A') return 'url';
   if (element.tagName === 'TIME') return 'date';

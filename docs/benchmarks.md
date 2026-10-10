@@ -176,3 +176,49 @@ did not tree-shake at all. Three causes, all fixed in the same change:
 
 Rollup's `experimentalLogSideEffects` reports no remaining top-level side
 effect in the source graph; the gate keeps it that way.
+
+## Generic CSS bindings with manual fragment permissions
+
+Measured locally on 2026-10-11, Node 22.22.3 on Windows. The baseline is an
+untouched checkout of fork HEAD (`37a8081`), rebuilt with the same repository
+scripts and installed toolchain. These are preview runtime costs; public
+responses continue to suppress bindings and runtime delivery.
+
+| Inline profile | Baseline gzip | Current gzip |        Increase |
+| -------------- | ------------: | -----------: | --------------: |
+| Full           |      39,665 B |     41,326 B | 1,661 B (4.19%) |
+| Lean           |      30,048 B |     31,292 B | 1,244 B (4.14%) |
+| With fragments |      43,465 B |     45,092 B | 1,627 B (3.74%) |
+
+Full raw size increased from 126,826 to 131,693 bytes; Brotli increased from
+34,823 to 36,242 bytes. The net change replaces the hex-only renderer with a
+generic CSS renderer, bounded formatting/value validation and multiple binding
+destinations. Explicit boundary `patchFields` permissions remain; automatic
+coverage inference and a separate CSS writer branch are removed. Boundary
+metadata is indexed during the binding scan, while fragment selection uses the
+existing planner. That index can also serve future child-fragment planning;
+keyed child selection is not part of this change.
+
+The initial prototype added 1,961 gzip bytes. Simplification reduced that to
+1,671; restoring manual permissions and the renderer pipeline gives 1,661.
+Removing inference alone is therefore not a substantial compressed-size saving.
+The remaining growth is measurable; this is not evidence of a minimum size.
+Byte ceilings preserve their original cushions over paired measurements.
+
+The focused CSS/permission microbenchmark is
+`tests/benchmarks/css-bindings.bench.ts`. Manual patch permissions already
+required precise path diffing in the old fork, so the ordinary/detailed diff
+comparison is an absolute cost, not a new cost attributable to generic CSS.
+Measured in one worker: about 3.35 million substitutions/validations and
+2.52 million cached permission checks per second. Ordinary versus detailed
+diffing took 0.0023 versus 0.0349 ms at 10 blocks, and 0.0198 versus 0.3506 ms
+at 100 blocks. These are absolute synthetic timings, not a paired speedup over
+the old implementation. They do not measure browser paint or network latency.
+
+This revision ran the affected runtime, CSS/security, permission, Lexical,
+scheduler replay, ownership/recovery, observer and DSL suites: 175 tests in
+11 files, with at most two workers. The full unit, integration and browser
+suites were not repeated. Typecheck, lint, bundle and architecture checks are
+also reported separately. The earlier Windows timer/symlink issues remain
+outside this change. API regeneration still exposes the same replay-store link
+warnings and forgotten-export baseline mismatch seen in the untouched fork.

@@ -37,7 +37,7 @@ export {
   type PreviewRequestOptions,
   type PreviewSignal,
 } from '@adapters/shared/preview-request';
-export { bind, bindByPath, createPreviewBindings } from '@dsl/index';
+export { bind, bindByPath, bindMany, createPreviewBindings } from '@dsl/index';
 export { previewBindingsFromLocals } from '@adapters/shared/locals';
 export type {
   BindOptions,

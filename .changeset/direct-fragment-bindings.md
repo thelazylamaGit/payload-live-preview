@@ -2,4 +2,4 @@
 'payload-live-preview': patch
 ---
 
-Allow fragment boundaries to opt exact bound fields into direct DOM updates with `patchFields`. Add a safe hex-colour binding for `background-color`, preserve pending server work across revisions, and keep direct updates responsive during sustained edits. Add optional `bindingDebounceMs` to schedule direct writes independently of population; `0` coalesces revisions on animation frames without changing default timing or fragment routing.
+Generalize CSS bindings beyond background colour using the existing renderer and transform pipeline. Keep explicit boundary patchFields permissions, with object-member paths, safe formats/fallbacks and multiple bindings per element. Preserve revision recovery and Lexical leaf handling; remove automatic coverage inference, CSS-only defaults and redundant response permissions.

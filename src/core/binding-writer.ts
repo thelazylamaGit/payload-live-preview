@@ -153,9 +153,9 @@ export class BindingWriter {
     const applied = isCurrent();
     if (applied) {
       if (update.valueIdentity !== undefined) {
-        state.lastAppliedIdentity.set(target.element, update.valueIdentity);
+        state.lastAppliedIdentity.set(target, update.valueIdentity);
       } else {
-        state.lastAppliedIdentity.delete(target.element);
+        state.lastAppliedIdentity.delete(target);
       }
     }
     return applied;

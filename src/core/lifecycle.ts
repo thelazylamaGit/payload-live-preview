@@ -443,21 +443,35 @@ export class LivePreviewRuntime {
   private rebuildCache(): void {
     const { state, deps } = this;
     if (!state.isRunning()) return;
-    const previous = new Map<Element, CachedElement>();
+    const previous = new Map<Element, CachedElement[]>();
     for (const entry of deps.cache.values()) {
-      previous.set(entry.element, entry);
+      const bucket = previous.get(entry.element) ?? [];
+      bucket.push(entry);
+      previous.set(entry.element, bucket);
       deps.observers.unobserveElement(entry.element);
     }
     this.buildCacheAndObserve();
     if (!state.isRunning()) return;
     // Buffered work survives only while the same element is bound to the same field.
     for (const entry of deps.cache.values()) {
-      const before = previous.get(entry.element);
-      if (before?.fieldName === entry.fieldName) deps.scheduler.retarget(entry);
-      else deps.scheduler.forget(entry.element);
-      previous.delete(entry.element);
+      const before = previous
+        .get(entry.element)
+        ?.find(
+          (old) =>
+            old.fieldName === entry.fieldName &&
+            old.cssBinding?.property === entry.cssBinding?.property &&
+            old.targetAttribute === entry.targetAttribute &&
+            old.locale === entry.locale,
+        );
+      deps.scheduler.retarget(entry);
+      if (before !== undefined) {
+        const identity = state.lastAppliedIdentity.get(before);
+        if (identity !== undefined) state.lastAppliedIdentity.set(entry, identity);
+      }
     }
-    for (const removed of previous.values()) deps.scheduler.forget(removed.element);
+    for (const entries of previous.values()) {
+      for (const entry of entries) deps.scheduler.forgetBinding(entry);
+    }
   }
 
   private onHeartbeatTimeout(): void {

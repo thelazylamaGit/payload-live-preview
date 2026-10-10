@@ -37,7 +37,6 @@ export type FragmentOutcome =
       readonly status: 'rendered';
       /** The boundary's new inner HTML. */
       readonly html: string;
-      readonly patchFields?: readonly string[];
       readonly metadata?: Readonly<Record<string, unknown>>;
     }
   | { readonly status: 'failed'; readonly code: DiagnosticCode; readonly reason: string }

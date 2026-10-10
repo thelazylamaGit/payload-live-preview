@@ -215,7 +215,6 @@ export function createFragmentHandler(options: FragmentStrategyOptions): Fragmen
         status: 'rendered' as const,
         html: fragment.html,
         metadata: fragment.metadata,
-        patchFields: fragment.patchFields,
       });
     } finally {
       timeout.dispose();

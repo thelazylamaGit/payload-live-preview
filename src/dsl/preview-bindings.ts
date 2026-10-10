@@ -8,7 +8,7 @@ import {
   isAuthorizedPreviewContext,
   type AuthorizedPreviewContext,
 } from '@/types/authorized-preview';
-import { bind, bindByPath, type BindOptions, type FieldBindingAttributes } from './bind';
+import { bind, bindByPath, bindMany, type BindOptions, type FieldBindingAttributes } from './bind';
 import type { FieldName } from './paths';
 
 export interface OwnerBindingAttributes {
@@ -28,7 +28,7 @@ export interface FragmentBoundaryOptions {
   readonly key?: string;
   /** The fields that re-render the boundary. Without it, every update does. */
   readonly dependsOn?: readonly string[];
-  /** Exact bound paths safe to patch without a server render; no wildcards. */
+  /** Fields whose complete effects may be patched locally; structural changes still render. */
   readonly patchFields?: readonly string[];
 }
 
@@ -55,6 +55,9 @@ export interface PreviewBindingsOptions {
 /** Request-scoped binding helpers carrying one authorization decision. */
 export interface PreviewBindings {
   readonly authorized: boolean;
+  bindMany: (
+    ...bindings: readonly (FieldBindingAttributes | SuppressedBinding)[]
+  ) => FieldBindingAttributes | SuppressedBinding;
   /** Typed field binding, or nothing while unauthorized. */
   bind: <T = Record<string, unknown>>(
     field: FieldName<T>,
@@ -99,11 +102,10 @@ function boundaryAttributes(
     );
   }
   const dependsOn = options.dependsOn ?? [];
+  const patchFields = options.patchFields ?? [];
   return {
     'data-payload-fragment': id,
-    ...(options.patchFields?.length
-      ? { 'data-payload-patch-fields': options.patchFields.join(',') }
-      : {}),
+    ...(patchFields.length > 0 ? { 'data-payload-patch-fields': patchFields.join(',') } : {}),
     ...(key !== undefined ? { 'data-payload-fragment-key': key } : {}),
     ...(dependsOn.length > 0 ? { 'data-payload-depends': dependsOn.join(',') } : {}),
   };
@@ -117,6 +119,8 @@ export function createPreviewBindings(options: PreviewBindingsOptions): PreviewB
 
   return Object.freeze({
     authorized,
+    bindMany: (...bindings: readonly (FieldBindingAttributes | SuppressedBinding)[]) =>
+      authorized ? bindMany(...(bindings as readonly FieldBindingAttributes[])) : SUPPRESSED,
     bind: <T = Record<string, unknown>>(
       field: FieldName<T>,
       bindOptions?: BindOptions,

@@ -112,13 +112,12 @@ describe('companion attributes (1.1.0)', () => {
 
 describe('colour binding options', () => {
   it('emits the narrow renderer and default without a style attribute target', () => {
-    expect(bind('colour', { cssProperty: 'background-color', cssDefault: '#0008' })).toEqual({
+    expect(bind('colour', { cssProperty: 'background-color', fallback: '#0008' })).toEqual({
       'data-payload-field': 'colour',
-      'data-payload-type': 'hexColor',
       'data-payload-css-property': 'background-color',
-      'data-payload-css-default': '#0008',
+      'data-payload-css-fallback': '#0008',
     });
     expect(() => bind('colour', { cssProperty: 'background-color', attribute: 'style' })).toThrow();
-    expect(() => bind('colour', { cssProperty: 'background-color', type: 'text' })).toThrow();
+    expect(() => bind('colour', { cssProperty: 'background-color', richtext: true })).toThrow();
   });
 });

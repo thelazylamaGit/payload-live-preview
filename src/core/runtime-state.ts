@@ -46,6 +46,7 @@ export interface UpdateTransaction {
   /** Actual tracker changes, including population refinements that do not schedule ordinary writes. */
   changedFields?: ReadonlySet<string>;
   changedPaths?: ReadonlySet<string>;
+  /** Paths whose structure changed and therefore need server markup. */
   structuralPaths?: ReadonlySet<string>;
   /** The connection's first message, where every field counts as changed. */
   baseline: boolean;
@@ -179,7 +180,7 @@ export class RuntimeState {
    */
   warnedForeignSource = false;
   /** Identity of the value each element last applied; reset when the markup is re-rendered. */
-  lastAppliedIdentity = new WeakMap<Element, string>();
+  lastAppliedIdentity = new WeakMap<CachedElement, string>();
   /** What each owned field was last seen with, for the reveal decision only. */
   readonly revealLedger = new RevealLedger();
   readonly fragmentStats = { rendered: 0, failed: 0, superseded: 0 };

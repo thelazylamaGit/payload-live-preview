@@ -3,14 +3,17 @@
  * `bindByPath` records the path through a Proxy, so a rename follows.
  */
 
+import { validCssProperty, validCssValue, parseCssTemplate } from '@/types/css-binding';
 import type { FieldName } from './paths';
 
 /** A spreadable attribute record: `<h1 {...bind<Homepage>('heroTitle')}>`. */
 export interface FieldBindingAttributes {
   readonly 'data-payload-field': string;
   readonly 'data-payload-attribute'?: string;
-  readonly 'data-payload-css-property'?: 'background-color';
-  readonly 'data-payload-css-default'?: string;
+  readonly 'data-payload-css-property'?: string;
+  readonly 'data-payload-css-fallback'?: string;
+  readonly 'data-payload-css-format'?: string;
+  readonly 'data-payload-bindings'?: string;
   readonly 'data-payload-type'?: string;
   readonly 'data-payload-richtext'?: string;
   readonly 'data-payload-html'?: string;
@@ -23,10 +26,12 @@ export interface FieldBindingAttributes {
 export interface BindOptions {
   /** Attribute to write instead of the text content, e.g. `'src'` for `<img>`. */
   readonly attribute?: string;
-  /** Bind a hex colour to this property, using the hexColor renderer. */
-  readonly cssProperty?: 'background-color';
-  /** Hex colour used for null/empty values; omitted means remove the inline property. */
-  readonly cssDefault?: string;
+  /** Write one CSS property, including custom properties. */
+  readonly cssProperty?: string;
+  /** Bounded own-property substitution, e.g. `{value}{unit}`; CSS bindings only. */
+  readonly format?: string;
+  /** CSS value used for missing/null/empty inputs; omitted means remove the inline property. */
+  readonly fallback?: string;
   /** Explicit field type, bypassing schema detection. */
   readonly type?: string;
   /** Mark the binding as Lexical rich text; needed only when the initial render is empty. */
@@ -69,14 +74,18 @@ export function bindByPath<T = Record<string, unknown>>(
 }
 
 function buildAttributes(field: string, options: BindOptions | undefined): FieldBindingAttributes {
+  if (field.split('.').some((part) => ['__proto__', 'prototype', 'constructor'].includes(part))) {
+    throw new TypeError('Unsafe binding path');
+  }
   if (field.length === 0) {
     throw new Error('bind: field name must be a non-empty string');
   }
   const attrs: {
     'data-payload-field': string;
     'data-payload-attribute'?: string;
-    'data-payload-css-property'?: 'background-color';
-    'data-payload-css-default'?: string;
+    'data-payload-css-property'?: string;
+    'data-payload-css-fallback'?: string;
+    'data-payload-css-format'?: string;
     'data-payload-type'?: string;
     'data-payload-richtext'?: string;
     'data-payload-html'?: string;
@@ -86,18 +95,20 @@ function buildAttributes(field: string, options: BindOptions | undefined): Field
     'data-payload-array-template'?: string;
   } = { 'data-payload-field': field };
   if (options?.cssProperty !== undefined) {
-    if (
-      options.attribute !== undefined ||
-      (options.type !== undefined && options.type !== 'hexColor')
-    ) {
-      throw new Error(
-        'bind: cssProperty requires the hexColor renderer and cannot target an attribute',
-      );
+    if (options.attribute !== undefined || options.richtext === true || options.html === true) {
+      throw new Error('bind: cssProperty cannot target an attribute, rich text or HTML');
     }
     attrs['data-payload-css-property'] = options.cssProperty;
-    attrs['data-payload-type'] = 'hexColor';
+    if (!validCssProperty(options.cssProperty)) throw new TypeError('Invalid CSS property');
+    if (options.format !== undefined) {
+      if (parseCssTemplate(options.format) === undefined) throw new TypeError('Invalid CSS format');
+      attrs['data-payload-css-format'] = options.format;
+    }
+    if (options.fallback !== undefined && !validCssValue(options.fallback)) {
+      throw new TypeError('Invalid CSS fallback');
+    }
   }
-  if (options?.cssDefault !== undefined) attrs['data-payload-css-default'] = options.cssDefault;
+  if (options?.fallback !== undefined) attrs['data-payload-css-fallback'] = options.fallback;
   if (options?.attribute !== undefined) attrs['data-payload-attribute'] = options.attribute;
   if (options?.type !== undefined) attrs['data-payload-type'] = options.type;
   // Presence attributes: the runtime tests for the attribute, not its value.
@@ -131,4 +142,27 @@ function recordPath(picker: (data: never) => unknown): string[] {
     // A picker doing math or JSX on the proxy throws after recording the path it meant.
   }
   return path;
+}
+
+/** Combine declarations on one element; spread the result once. */
+export function bindMany(...bindings: readonly FieldBindingAttributes[]): FieldBindingAttributes {
+  const destinations = new Set<string>();
+  for (const binding of bindings) {
+    if (binding['data-payload-bindings'] !== undefined) {
+      throw new TypeError('bindMany cannot be nested');
+    }
+    const destination =
+      binding['data-payload-css-property'] !== undefined
+        ? 'css:' + binding['data-payload-css-property']
+        : binding['data-payload-attribute'] !== undefined
+          ? 'attr:' + binding['data-payload-attribute']
+          : 'content';
+    if (destinations.has(destination)) {
+      throw new TypeError('bindMany requires distinct destinations');
+    }
+    destinations.add(destination);
+  }
+  const first = bindings[0];
+  if (first === undefined) throw new TypeError('bindMany requires a binding');
+  return { ...first, 'data-payload-bindings': JSON.stringify(bindings.slice(1)) };
 }

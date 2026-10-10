@@ -9,6 +9,12 @@ export interface CachedElement {
     readonly altField?: string;
     readonly arraySeparator?: string;
     readonly arrayTemplate?: string;
+    readonly cssBinding?: {
+        readonly property: string;
+        readonly supported?: boolean;
+        readonly template?: readonly string[];
+        readonly fallback?: string;
+    };
     readonly dependsOn?: readonly string[];
     readonly element: Element;
     readonly explicitFieldType?: boolean;
@@ -132,7 +138,7 @@ export type FieldTransform = (value: unknown, context: {
 }) => unknown;
 
 // @public
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
+export type FieldType = PayloadFieldType | 'css' | 'html' | 'url' | 'image' | 'structural-array';
 
 // @public
 export interface FocusReportTarget {
@@ -153,7 +159,7 @@ export interface FragmentContext {
     // (undocumented)
     readonly locale: string | undefined;
     readonly log: (code: DiagnosticCode, detail: string) => void;
-    readonly morph: (boundary: Element, html: string, patchFields?: readonly string[]) => void;
+    readonly morph: (boundary: Element, html: string) => void;
     readonly patch: (boundary: Element) => void;
     // (undocumented)
     readonly receivedAt: number;

@@ -5,8 +5,7 @@ import type { SanitizerPolicyMode } from '@security/sanitizer';
 import type { UpdateSource } from './strategies';
 
 /** Payload's field set plus the DOM-binding categories `html`, `url`, `image` and `structural-array`. */
-export type FieldType =
-  PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
+export type FieldType = PayloadFieldType | 'css' | 'html' | 'url' | 'image' | 'structural-array';
 
 /** A namespaced project renderer key, so a typo of a built-in type can never become one. */
 export type CustomRendererKey = `${string}:${string}`;
@@ -29,6 +28,13 @@ export type RichTextRenderer = (
 
 /** One registered binding. Several may share a field name when it renders in several places. */
 export interface CachedElement {
+  /** Parsed generic style destination and format. */
+  readonly cssBinding?: {
+    readonly property: string;
+    readonly supported?: boolean;
+    readonly template?: readonly string[];
+    readonly fallback?: string;
+  };
   /** The bound DOM element. */
   readonly element: Element;
   /** Payload field path, e.g., `title` or `hero.subtitle`. */

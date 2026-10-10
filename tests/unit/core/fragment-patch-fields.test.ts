@@ -20,14 +20,13 @@ function markup(items: readonly Block[]): string {
   return items
     .map(
       (item, index) => `<article data-payload-key="${item.id}" id="${item.id}">
-    <div data-payload-field="blocks.${index}.colour" data-payload-type="hexColor" data-payload-css-property="background-color" style="background-color:${item.colour ?? '#000'};opacity:0.5"></div>
+    <div data-payload-field="blocks.${index}.colour" data-payload-css-property="background-color" style="background-color:${item.colour ?? '#000'};opacity:0.5"></div>
     <h2 data-payload-field="blocks.${index}.title">${item.title}</h2>
     <span class="image">${typeof item.image === 'string' ? item.image : 'populated'}</span>
   </article>`,
     )
     .join('');
 }
-const fields = 'blocks.0.colour,blocks.0.title,blocks.1.colour,blocks.1.title';
 function response(body: FragmentRequestBody): Response {
   return new Response(
     JSON.stringify({
@@ -66,7 +65,7 @@ function start(
     scopeBindingsByOwner?: boolean;
   } = {},
 ) {
-  document.body.innerHTML = `<section data-payload-fragment="page-blocks" data-payload-depends="blocks" ${options.optIn === false ? '' : `data-payload-patch-fields="${fields}"`}>${markup(blocks())}</section>`;
+  document.body.innerHTML = `<section data-payload-fragment="page-blocks" data-payload-depends="blocks" ${options.optIn === false ? '' : `data-payload-patch-fields="blocks.0.colour,blocks.1.colour,blocks.0.title,blocks.1.title"`}>${markup(blocks())}</section>`;
   const fetchFragment = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
     (_url, init) =>
       Promise.resolve(response(JSON.parse(init?.body as string) as FragmentRequestBody)),
@@ -100,7 +99,7 @@ async function baseline(fetchFragment: ReturnType<typeof start>, items = blocks(
   fetchFragment.mockClear();
 }
 
-describe('explicit fragment patch fields through runtime and HTTP strategy', () => {
+describe('explicit bindings within opted-in boundaries through runtime and HTTP strategy', () => {
   it('coalesces rapid revisions on each frame independently of the population window', async () => {
     const population = vi.fn<typeof fetch>(() =>
       Promise.resolve(new Response(JSON.stringify({ blocks: blocks() }))),
@@ -204,9 +203,6 @@ describe('explicit fragment patch fields through runtime and HTTP strategy', () 
     post(items);
     await tick();
     expect(fetchFragment).toHaveBeenCalledTimes(1);
-    document
-      .querySelector('section')
-      ?.setAttribute('data-payload-patch-fields', fields + ',blocks.0.image');
     fetchFragment.mockClear();
     items[0]!.image = 'new';
     post(items);
@@ -311,60 +307,6 @@ describe('explicit fragment patch fields through runtime and HTTP strategy', () 
     await tick();
     expect(fetchFragment).toHaveBeenCalledTimes(1);
   });
-
-  it('handles all hex lengths, clearing and defaults without accepting CSS expressions or other writes', async () => {
-    const fetchFragment = start();
-    await baseline(fetchFragment);
-    const items = blocks();
-    for (const [hex, css] of [
-      ['#abc', 'rgb(170, 187, 204)'],
-      ['#abcd', 'rgba(170, 187, 204, 0.867)'],
-      ['#abcdef', 'rgb(171, 205, 239)'],
-      ['#abcdef80', 'rgba(171, 205, 239, 0.5)'],
-    ]) {
-      items[0]!.colour = hex!;
-      post(items);
-      await tick();
-      expect(colour().style.backgroundColor).toBe(css);
-    }
-    const previous = colour().style.backgroundColor;
-    for (const invalid of [
-      '#',
-      '#12',
-      '#zzzzzz',
-      'red',
-      'url(https://evil.example)',
-      '#fff;opacity:1',
-    ]) {
-      items[0]!.colour = invalid;
-      post(items);
-      await tick();
-      expect(colour().style.backgroundColor).toBe(previous);
-    }
-    colour().setAttribute('data-payload-css-default', '#0008');
-    items[0]!.colour = null;
-    post(items);
-    await tick();
-    expect(colour().style.backgroundColor).toBe('rgba(0, 0, 0, 0.533)');
-    colour().removeAttribute('data-payload-css-default');
-    items[0]!.colour = '';
-    post(items);
-    await tick();
-    expect(colour().style.backgroundColor).toBe('');
-    colour().setAttribute('data-payload-css-property', 'opacity');
-    items[0]!.colour = '#f00';
-    post(items);
-    await tick();
-    expect(colour().style.opacity).toBe('0.5');
-    colour().setAttribute('data-payload-attribute', 'style');
-    runtime?.refreshCache();
-    items[0]!.colour = 'background-color:red';
-    post(items);
-    await tick();
-    expect(colour().style.backgroundColor).toBe('');
-    expect(colour().style.opacity).toBe('0.5');
-    expect(fetchFragment).not.toHaveBeenCalled();
-  });
 });
 
 it('preserves owner scoping for opted-in colour patches', async () => {
@@ -375,7 +317,7 @@ it('preserves owner scoping for opted-in colour patches', async () => {
   const other = document.createElement('aside');
   other.setAttribute('data-payload-owner', 'global:other');
   other.innerHTML =
-    '<div data-payload-field="blocks.0.colour" data-payload-type="hexColor" data-payload-css-property="background-color" style="background-color:#000"></div>';
+    '<div data-payload-field="blocks.0.colour" data-payload-css-property="background-color" style="background-color:#000"></div>';
   document.body.append(other);
   runtime?.refreshCache();
   const items = blocks();
@@ -390,7 +332,6 @@ it('preserves owner scoping for opted-in colour patches', async () => {
 it('cannot opt a structural array into a scalar patch', async () => {
   const fetchFragment = start();
   await baseline(fetchFragment);
-  document.querySelector('section')?.setAttribute('data-payload-patch-fields', fields + ',blocks');
   document
     .querySelector('section')
     ?.insertAdjacentHTML('beforeend', '<div data-payload-field="blocks"></div>');

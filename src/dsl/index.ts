@@ -1,4 +1,4 @@
-export { bind, bindByPath, type BindOptions, type FieldBindingAttributes } from './bind';
+export { bind, bindByPath, bindMany, type BindOptions, type FieldBindingAttributes } from './bind';
 export {
   createPreviewBindings,
   type FragmentBoundaryAttributes,

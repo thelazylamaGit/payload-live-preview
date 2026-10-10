@@ -51,6 +51,9 @@ export function bind<T = Record<string, unknown>>(field: FieldName<T>, options?:
 export function bindByPath<T = Record<string, unknown>>(picker: (data: T) => unknown, options?: BindOptions): FieldBindingAttributes;
 
 // @public
+export function bindMany(...bindings: readonly FieldBindingAttributes[]): FieldBindingAttributes;
+
+// @public
 export function bindNavigationLifecycle(target: NavigationLifecycleTarget, options?: NavigationLifecycleOptions): () => void;
 
 // @public (undocumented)
@@ -58,8 +61,9 @@ export interface BindOptions {
     readonly alt?: string;
     readonly arrayTemplate?: string;
     readonly attribute?: string;
-    readonly cssDefault?: string;
-    readonly cssProperty?: 'background-color';
+    readonly cssProperty?: string;
+    readonly fallback?: string;
+    readonly format?: string;
     readonly href?: string;
     readonly html?: boolean;
     readonly locale?: string;
@@ -93,6 +97,12 @@ export interface CachedElement {
     readonly altField?: string;
     readonly arraySeparator?: string;
     readonly arrayTemplate?: string;
+    readonly cssBinding?: {
+        readonly property: string;
+        readonly supported?: boolean;
+        readonly template?: readonly string[];
+        readonly fallback?: string;
+    };
     readonly dependsOn?: readonly string[];
     readonly element: Element;
     readonly explicitFieldType?: boolean;
@@ -321,9 +331,13 @@ export interface FieldBindingAttributes {
     // (undocumented)
     readonly 'data-payload-attribute'?: string;
     // (undocumented)
-    readonly 'data-payload-css-default'?: string;
+    readonly 'data-payload-bindings'?: string;
     // (undocumented)
-    readonly 'data-payload-css-property'?: 'background-color';
+    readonly 'data-payload-css-fallback'?: string;
+    // (undocumented)
+    readonly 'data-payload-css-format'?: string;
+    // (undocumented)
+    readonly 'data-payload-css-property'?: string;
     // (undocumented)
     readonly 'data-payload-field': string;
     // (undocumented)
@@ -364,7 +378,7 @@ export type FieldTransform = (value: unknown, context: {
 }) => unknown;
 
 // @public
-export type FieldType = PayloadFieldType | 'html' | 'url' | 'image' | 'structural-array' | 'hexColor';
+export type FieldType = PayloadFieldType | 'css' | 'html' | 'url' | 'image' | 'structural-array';
 
 // @public
 export interface FocusReportTarget {
@@ -404,7 +418,7 @@ export interface FragmentContext {
     // (undocumented)
     readonly locale: string | undefined;
     readonly log: (code: DiagnosticCode, detail: string) => void;
-    readonly morph: (boundary: Element, html: string, patchFields?: readonly string[]) => void;
+    readonly morph: (boundary: Element, html: string) => void;
     readonly patch: (boundary: Element) => void;
     // (undocumented)
     readonly receivedAt: number;
@@ -1153,6 +1167,8 @@ export interface PreviewBindings {
     readonly authorized: boolean;
     bind: <T = Record<string, unknown>>(field: FieldName<T>, options?: BindOptions) => FieldBindingAttributes | SuppressedBinding;
     bindByPath: <T = Record<string, unknown>>(picker: (data: T) => unknown, options?: BindOptions) => FieldBindingAttributes | SuppressedBinding;
+    // (undocumented)
+    bindMany: (...bindings: readonly (FieldBindingAttributes | SuppressedBinding)[]) => FieldBindingAttributes | SuppressedBinding;
     boundary: (id: string, options?: FragmentBoundaryOptions) => FragmentBoundaryAttributes | SuppressedBinding;
     owner: () => OwnerBindingAttributes | SuppressedBinding;
 }

@@ -494,3 +494,5 @@ A statically built page has no request to authorize, so it emits nothing.
 `allowPublicBindings: true` writes the plain attribute there instead — the same
 output as the codemod, and the same disclosure, said out loud rather than
 arrived at.
+
+Generic CSS bindings and combining declarations with `preview.bindMany()` are documented in [the hybrid binding API](hybrid.md#generic-style-bindings).

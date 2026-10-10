@@ -28,6 +28,7 @@ const PUBLIC_FUNCTION_NAMES: readonly string[] = [
   'generateInlineScript',
   'bind',
   'bindByPath',
+  'bindMany',
   'buildFrameAncestors',
   'buildScriptSrcWithNonce',
   'createPreviewBindings',

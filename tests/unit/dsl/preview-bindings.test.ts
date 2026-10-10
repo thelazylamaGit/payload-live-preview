@@ -167,16 +167,16 @@ describe('createPreviewBindings — request scoping', () => {
 
 describe('opt-in fragment patch authorization', () => {
   it('emits the opt-in contract only with the existing authorization context', () => {
-    const options = { dependsOn: ['blocks'], patchFields: ['blocks.0.colour'] };
+    const options = { dependsOn: ['blocks'], patchFields: ['blocks.0.radius', 'blocks.0.title'] };
     expect(createPreviewBindings({ authorization: ctx }).boundary('page-blocks', options)).toEqual({
       'data-payload-fragment': 'page-blocks',
       'data-payload-depends': 'blocks',
-      'data-payload-patch-fields': 'blocks.0.colour',
+      'data-payload-patch-fields': 'blocks.0.radius,blocks.0.title',
     });
     const publicBindings = createPreviewBindings({ authorization: null });
     expect(publicBindings.boundary('page-blocks', options)).toEqual({});
     expect(
-      publicBindings.bind('colour', { cssProperty: 'background-color', cssDefault: '#0008' }),
+      publicBindings.bind('colour', { cssProperty: 'background-color', fallback: '#0008' }),
     ).toEqual({});
   });
 });

@@ -99,6 +99,7 @@ export class StrategyRunner {
             boundary,
             new Set([...(transaction.changedPaths ?? []), ...transaction.invalidated]),
             transaction.structuralPaths,
+            transaction.schemaIndex,
           ),
       );
     if (transaction !== undefined) this.fragments.reconcile(transaction, planned);
@@ -394,7 +395,7 @@ export class StrategyRunner {
       for (const target of bindings) {
         if (target.fragmentBoundary !== boundary) continue;
         const value = bindingValue(data.fields, target, fieldName, transaction.locale);
-        if (value === undefined) continue;
+        if (value === undefined && target.cssBinding === undefined) continue;
         this.deps.scheduler.schedule({
           target,
           value: this.host.transform(target, value, data.fields, () => true),

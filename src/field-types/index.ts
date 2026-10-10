@@ -2,8 +2,8 @@
 
 import type { FieldRenderer } from '@core/types';
 import { createTextRenderer } from './text';
+import { cssRenderer } from './css';
 import { richTextRenderer } from './rich-text';
-import { hexColorRenderer } from './hex-color';
 import { htmlRenderer } from './html';
 import { urlRenderer } from './url';
 import { emailRenderer } from './email';
@@ -52,9 +52,9 @@ export function buildBuiltinRenderers(): Readonly<Record<string, FieldRenderer>>
   // Built per call: a module-level table would pin every renderer into any
   // consumer importing an unrelated symbol from the root barrel.
   const stateless: readonly FieldRenderer[] = [
+    cssRenderer,
     richTextRenderer,
     htmlRenderer,
-    hexColorRenderer,
     urlRenderer,
     emailRenderer,
     imageRenderer,
